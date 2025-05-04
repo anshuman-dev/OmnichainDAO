@@ -6,10 +6,10 @@ export default function TokenOverview() {
   
   // Chain distribution color mapping
   const chainColors: Record<string, string> = {
-    Ethereum: "bg-green-500",
-    Polygon: "bg-purple-500",
-    Arbitrum: "bg-blue-500",
-    Base: "bg-yellow-500"
+    "Ethereum Goerli": "bg-green-500",
+    "Polygon Mumbai": "bg-purple-500",
+    "Arbitrum Goerli": "bg-blue-500",
+    "Base Goerli": "bg-yellow-500"
   };
 
   return (
@@ -30,22 +30,46 @@ export default function TokenOverview() {
             <div className="space-y-4">
               <div>
                 <div className="text-sm secondary-text mb-1">Total Supply</div>
-                <div className="text-lg font-['Roboto_Mono']">{tokenStats.totalSupply} OGV</div>
+                <div className="text-lg font-['Roboto_Mono']">
+                  {isLoading ? (
+                    <div className="h-6 w-32 bg-[#222222] animate-pulse rounded"></div>
+                  ) : (
+                    `${tokenStats.totalSupply} OGV`
+                  )}
+                </div>
               </div>
               
               <div>
                 <div className="text-sm secondary-text mb-1">Current Price</div>
-                <div className="text-lg font-['Roboto_Mono']">${tokenStats.price} USD</div>
+                <div className="text-lg font-['Roboto_Mono']">
+                  {isLoading ? (
+                    <div className="h-6 w-24 bg-[#222222] animate-pulse rounded"></div>
+                  ) : (
+                    `$${tokenStats.price} USD`
+                  )}
+                </div>
               </div>
               
               <div>
                 <div className="text-sm secondary-text mb-1">24h Volume</div>
-                <div className="text-lg font-['Roboto_Mono']">${tokenStats.volume}</div>
+                <div className="text-lg font-['Roboto_Mono']">
+                  {isLoading ? (
+                    <div className="h-6 w-28 bg-[#222222] animate-pulse rounded"></div>
+                  ) : (
+                    `$${tokenStats.volume}`
+                  )}
+                </div>
               </div>
               
               <div>
                 <div className="text-sm secondary-text mb-1">Circulating Supply</div>
-                <div className="text-lg font-['Roboto_Mono']">{tokenStats.circulatingSupply} OGV</div>
+                <div className="text-lg font-['Roboto_Mono']">
+                  {isLoading ? (
+                    <div className="h-6 w-32 bg-[#222222] animate-pulse rounded"></div>
+                  ) : (
+                    `${tokenStats.circulatingSupply} OGV`
+                  )}
+                </div>
               </div>
             </div>
           </div>

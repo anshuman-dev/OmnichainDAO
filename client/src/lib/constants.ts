@@ -14,10 +14,12 @@ export const DEFAULT_USER_BALANCE = {
   usdValue: "0.00"
 };
 
-// Testnet contracts - LayerZero Endpoints for testnets
+// Testnet contracts - Using a verified token contract on Goerli
 export const DEFAULT_CONTRACTS = {
-  oft: "0x3c2269811836af69497E5F486A85D7316753cf62", // OFT contract on Ethereum Goerli testnet
-  endpoint: "0xbfD2135BFfbb0B5378b56643c2Df8a87552Bfa23" // LayerZero Endpoint on Ethereum Goerli testnet
+  // This is a real testnet token contract (USDT on Goerli)
+  oft: "0x509Ee0d083DdF8AC028f2a56731412edD63223B9",
+  // LayerZero Endpoint on Ethereum Goerli testnet
+  endpoint: "0xbfD2135BFfbb0B5378b56643c2Df8a87552Bfa23"
 };
 
 // Initial testnet chain distribution
