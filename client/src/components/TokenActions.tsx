@@ -76,22 +76,22 @@ export default function TokenActions({ openWalletModal }: TokenActionsProps) {
   
   return (
     <div className="lg:col-span-1">
-      <div className="bg-[#101010] border border-[#323232] rounded-xl p-6 mb-6">
-        <h2 className="text-xl mb-6">Token Actions</h2>
+      <div className="lz-card mb-6">
+        <h2 className="text-xl font-['Roboto'] mb-6">Token Actions</h2>
         
         {/* Your Balance */}
         <div className="mb-6">
-          <div className="text-sm text-[#797575] mb-1">Your Balance</div>
-          <div className="text-2xl font-medium">{userBalance.total} OGV</div>
-          <div className="text-[#797575] text-sm">≈ ${userBalance.usdValue} USD</div>
+          <div className="secondary-text text-sm mb-1">Your Balance</div>
+          <div className="text-2xl font-medium font-['Roboto']">{userBalance.total} OGV</div>
+          <div className="secondary-text text-sm">≈ ${userBalance.usdValue} USD</div>
         </div>
         
         {/* Chain Selector */}
         <div className="mb-6">
-          <label className="block text-sm text-[#797575] mb-2">Select Chain</label>
-          <div className="relative">
+          <label className="block secondary-text text-sm mb-2">Select Chain</label>
+          <div className="lz-select-wrapper">
             <select 
-              className="w-full bg-[#0A0A0A] border border-[#323232] text-white rounded-lg px-4 py-2 appearance-none focus:outline-none focus:border-[#797575]"
+              className="lz-select w-full"
               value={currentNetwork?.id}
               onChange={handleNetworkChange}
             >
@@ -101,42 +101,37 @@ export default function TokenActions({ openWalletModal }: TokenActionsProps) {
                 </option>
               ))}
             </select>
-            <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-              <svg className="w-4 h-4 text-[#797575]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-              </svg>
-            </div>
           </div>
         </div>
         
         {/* Bridge Module */}
         <div className="mb-6">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="uppercase-label text-[#797575]">Bridge Tokens</h3>
-            <div className="text-xs text-[#797575]">Fee: 0.1%</div>
+            <h3 className="uppercase-label">BRIDGE TOKENS</h3>
+            <div className="text-xs secondary-text">Fee: 0.1%</div>
           </div>
           
           <div className="mb-4">
-            <label className="block text-sm text-[#797575] mb-2">Amount</label>
-            <div className="relative rounded-lg">
+            <label className="block secondary-text text-sm mb-2">Amount</label>
+            <div className="relative">
               <input 
                 type="text" 
                 placeholder="0.00"
                 value={amount} 
                 onChange={handleAmountChange}
-                className="w-full bg-[#0A0A0A] border border-[#323232] text-white rounded-lg px-4 py-2 focus:outline-none focus:border-[#797575]"
+                className="lz-input w-full pr-16"
               />
               <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                <span className="text-[#797575]">OGV</span>
+                <span className="secondary-text font-['Roboto_Mono']">OGV</span>
               </div>
             </div>
           </div>
           
           <div className="mb-6">
-            <label className="block text-sm text-[#797575] mb-2">Destination Chain</label>
-            <div className="relative">
+            <label className="block secondary-text text-sm mb-2">Destination Chain</label>
+            <div className="lz-select-wrapper">
               <select 
-                className="w-full bg-[#0A0A0A] border border-[#323232] text-white rounded-lg px-4 py-2 appearance-none focus:outline-none focus:border-[#797575]"
+                className="lz-select w-full"
                 value={destinationChain}
                 onChange={handleDestinationChange}
               >
@@ -146,36 +141,31 @@ export default function TokenActions({ openWalletModal }: TokenActionsProps) {
                   </option>
                 ))}
               </select>
-              <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                <svg className="w-4 h-4 text-[#797575]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                </svg>
-              </div>
             </div>
           </div>
           
           {/* Gas Estimation */}
-          <div className="bg-[#0A0A0A] rounded-lg p-4 mb-6">
+          <div className="bg-black rounded-lg p-4 mb-6 border border-[#323232]">
             <div className="flex justify-between items-center mb-1">
-              <span className="text-sm text-[#797575]">LayerZero Fee</span>
-              <span className="text-sm">≈ ${fees.layerZeroFee.toFixed(2)}</span>
+              <span className="text-sm secondary-text">LayerZero Fee</span>
+              <span className="text-sm font-['Roboto_Mono']">≈ ${fees.layerZeroFee.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center mb-1">
-              <span className="text-sm text-[#797575]">Bridge Fee (0.1%)</span>
-              <span className="text-sm">≈ ${fees.bridgeFee.toFixed(2)}</span>
+              <span className="text-sm secondary-text">Bridge Fee (0.1%)</span>
+              <span className="text-sm font-['Roboto_Mono']">≈ ${fees.bridgeFee.toFixed(2)}</span>
             </div>
             <div className="flex justify-between items-center mb-1">
-              <span className="text-sm text-[#797575]">Gas Fee</span>
-              <span className="text-sm">≈ ${fees.gasFee.toFixed(2)}</span>
+              <span className="text-sm secondary-text">Gas Fee</span>
+              <span className="text-sm font-['Roboto_Mono']">≈ ${fees.gasFee.toFixed(2)}</span>
             </div>
             <div className="border-t border-[#323232] mt-2 pt-2 flex justify-between items-center">
-              <span className="text-sm text-[#797575]">Total Cost</span>
-              <span>≈ ${fees.totalCost.toFixed(2)}</span>
+              <span className="text-sm secondary-text">Total Cost</span>
+              <span className="font-medium font-['Roboto_Mono']">≈ ${fees.totalCost.toFixed(2)}</span>
             </div>
           </div>
           
           <button 
-            className="w-full bg-[#101010] hover:bg-[#0A0A0A] border border-[#323232] hover:border-[#F2F2F2] text-[#F2F2F2] rounded-lg px-4 py-3 text-sm uppercase-label transition-all"
+            className="lz-button w-full py-3"
             onClick={handleBridgeTokens}
           >
             {isConnected ? "Bridge Tokens" : "Connect Wallet to Bridge"}

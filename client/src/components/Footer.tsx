@@ -10,13 +10,13 @@ export default function Footer() {
               <path d="M12 13.5C9 13.5 9 16.5 12 16.5C15 16.5 15 13.5 12 13.5Z" fill="white"/>
             </svg>
             <div className="text-sm">
-              <div>OmniGovern DAO</div>
-              <div className="text-xs text-[#797575]">© {new Date().getFullYear()} OmniGovern Labs</div>
+              <div className="font-['Roboto']">OmniGovern DAO</div>
+              <div className="text-xs secondary-text font-['Roboto_Mono']">© {new Date().getFullYear()} OmniGovern Labs</div>
             </div>
           </div>
           
           <div className="flex items-center">
-            <div className="text-xs text-[#797575] mr-4">Powered by</div>
+            <div className="text-xs secondary-text font-['Roboto_Mono'] mr-4">POWERED BY</div>
             <svg className="h-5 w-auto" viewBox="0 0 120 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M10 2C5.58 2 2 5.58 2 10C2 14.42 5.58 18 10 18C14.42 18 18 14.42 18 10C18 5.58 14.42 2 10 2ZM10 16C6.69 16 4 13.31 4 10C4 6.69 6.69 4 10 4C13.31 4 16 6.69 16 10C16 13.31 13.31 16 10 16Z" fill="white"/>
               <path d="M27 7H23V17H25V13H27C29.21 13 31 11.21 31 9C31 6.79 29.21 5 27 5ZM27 11H25V7H27C28.1 7 29 7.9 29 9C29 10.1 28.1 11 27 11Z" fill="white"/>
@@ -32,7 +32,7 @@ export default function Footer() {
           </div>
         </div>
         
-        <div className="text-center text-xs text-[#525252] mt-6">
+        <div className="text-center text-xs tertiary-text mt-6 font-['Roboto']">
           OmniGovern DAO enables decentralized autonomous organizations to propose, vote, and execute governance decisions natively across 10+ blockchains.
         </div>
       </div>
