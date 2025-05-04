@@ -56,9 +56,9 @@
     position: relative;
   }
   
-  body::before {
-    content: "";
-    position: absolute;
+  /* This is now applied to the main container, not the body */
+  .main-background {
+    position: fixed;
     top: 0;
     left: 0;
     right: 0;
@@ -72,9 +72,9 @@
       /* Lines */
       repeating-linear-gradient(90deg, #0A0A0A 0, #0A0A0A 1px, transparent 1px, transparent 30px),
       repeating-linear-gradient(0deg, #0A0A0A 0, #0A0A0A 1px, transparent 1px, transparent 30px);
-    opacity: 0.4;
+    opacity: 0.3;
     pointer-events: none;
-    z-index: 0;
+    z-index: -1;
   }
   
   /* Typography styles based on brand guidelines */

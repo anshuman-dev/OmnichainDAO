@@ -14,31 +14,31 @@ export const DEFAULT_USER_BALANCE = {
   usdValue: "0.00"
 };
 
-// Default contracts
+// Testnet contracts - LayerZero Endpoints for testnets
 export const DEFAULT_CONTRACTS = {
-  oft: "0x1234...5678",
-  endpoint: "0xabcd...ef01"
+  oft: "0x3c2269811836af69497E5F486A85D7316753cf62", // OFT contract on Ethereum Goerli testnet
+  endpoint: "0xbfD2135BFfbb0B5378b56643c2Df8a87552Bfa23" // LayerZero Endpoint on Ethereum Goerli testnet
 };
 
-// Initial chain distribution
+// Initial testnet chain distribution
 export const INITIAL_CHAIN_DISTRIBUTION: ChainDistribution[] = [
   {
-    name: "Ethereum",
+    name: "Ethereum Goerli",
     amount: "50,000,000",
     percentage: 50
   },
   {
-    name: "Polygon",
+    name: "Polygon Mumbai",
     amount: "30,000,000",
     percentage: 30
   },
   {
-    name: "Arbitrum",
+    name: "Arbitrum Goerli",
     amount: "15,000,000",
     percentage: 15
   },
   {
-    name: "Base",
+    name: "Base Goerli",
     amount: "5,000,000",
     percentage: 5
   }
@@ -72,43 +72,43 @@ export const INITIAL_SUPPLY_CHECKS: SupplyCheck[] = [
   }
 ];
 
-// Available networks
+// Available testnet networks
 export const AVAILABLE_NETWORKS: Network[] = [
   {
-    id: "ethereum",
-    name: "Ethereum",
-    chainId: 1,
+    id: "ethereum-goerli",
+    name: "Ethereum Goerli",
+    chainId: 5,
     status: "Online",
-    latency: 125,
-    gasPrice: 25,
-    txCount: 532
+    latency: 65,
+    gasPrice: 3.2,
+    txCount: 0
   },
   {
-    id: "polygon",
-    name: "Polygon",
-    chainId: 137,
+    id: "polygon-mumbai",
+    name: "Polygon Mumbai",
+    chainId: 80001,
     status: "Online",
-    latency: 85,
-    gasPrice: 30,
-    txCount: 287
+    latency: 45,
+    gasPrice: 5.0,
+    txCount: 0
   },
   {
-    id: "arbitrum",
-    name: "Arbitrum",
-    chainId: 42161,
+    id: "arbitrum-goerli",
+    name: "Arbitrum Goerli",
+    chainId: 421613,
     status: "Online",
-    latency: 92,
+    latency: 55,
     gasPrice: 0.1,
-    txCount: 156
+    txCount: 0
   },
   {
-    id: "base",
-    name: "Base",
-    chainId: 8453,
-    status: "Syncing",
-    latency: 145,
-    gasPrice: 0.2,
-    txCount: 89
+    id: "base-goerli",
+    name: "Base Goerli",
+    chainId: 84531,
+    status: "Online",
+    latency: 72,
+    gasPrice: 0.05,
+    txCount: 0
   }
 ];
 
