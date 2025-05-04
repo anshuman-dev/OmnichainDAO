@@ -1,0 +1,215 @@
+OmniGovern DAO Development Checklist
+LayerZero V2-Centric Build Plan
+
+Core Smart Contracts
+1. OFT Governance Token
+ ERC20Votes Extension
+
+Implement snapshot voting power
+
+File: contracts/GovernanceOFT.sol
+
+ LayerZero OFT Integration
+
+Burn/mint mechanics across chains
+
+Dynamic bridging fees (0.1% default)
+
+ Supply Consistency Checks
+
+Automated supply audits via checkSupply()
+
+Integration: LayerZero's EndpointV2
+
+2. Cross-Chain Governor
+ Proposal Creation
+
+Chain-agnostic proposal origination
+
+File: contracts/BaseGovernor.sol
+
+ Vote Aggregation
+
+Weighted voting across chains
+
+LayerZero lzReceive handlers
+
+ Security Configuration
+
+DVN threshold (3/5 signatures)
+
+File: layerzero.config.ts
+
+3. Execution Layer
+ Atomic Cross-Chain Execution
+
+lzCompose batch transactions
+
+File: contracts/Executor.sol
+
+ Gas Abstraction
+
+Refund pool for voters
+
+Gas oracle integration
+
+ Timelock Controller
+
+24-hour delay for critical actions
+
+File: contracts/Timelock.sol
+
+Frontend Modules
+1. Chain-Agnostic UI
+ Wallet Integration
+
+MetaMask, Coinbase Wallet, WalletConnect
+
+File: src/components/WalletConnector.tsx
+
+ Proposal Creation Interface
+
+Multi-chain target selection
+
+Gas estimation tool
+
+ Real-Time Dashboard
+
+LayerZero Scan API integration
+
+Live vote tracking across chains
+
+2. Governance Features
+ Voting Interface
+
+Chain selector with gas comparison
+
+File: src/pages/Vote.tsx
+
+ Proposal History
+
+Cross-chain execution logs
+
+The Graph subgraph integration
+
+LayerZero Integration
+1. Protocol Configuration
+ Endpoint Setup
+
+Sepolia: 0x...
+
+Mumbai: 0x...
+
+File: constants/endpoints.ts
+
+ DVN Network
+
+Chainlink + Blockdaemon nodes
+
+Threshold signature verification
+
+ MessageLib Registry
+
+On-chain verification modules
+
+File: contracts/libs/MessageLib.sol
+
+2. Cross-Chain Testing
+ Local Simulation
+
+Hardhat node with mock DVNs
+
+Command: npx hardhat node --network layerzero
+
+ Testnet Verification
+
+Message tracing via LayerZero Scan
+
+Test cases for 3+ chain interactions
+
+Security & Audits
+1. Pre-Launch
+ Smart Contract Audits
+
+CertiK audit scope definition
+
+LayerZero team review
+
+ Stress Testing
+
+500+ cross-chain vote simulation
+
+Command: npx hardhat test --stress
+
+2. Post-Launch
+ Monitoring
+
+OpenZeppelin Sentinel alerts
+
+LayerZero message failure tracking
+
+ Emergency Features
+
+Global pause function
+
+File: contracts/EmergencyStop.sol
+
+Deployment Plan
+1. Staging
+ Testnet Deployments
+
+Sepolia, Mumbai, Arbitrum Goerli
+
+Script: scripts/deploy-staging.ts
+
+ Verification Steps
+
+OFT bridging test (ETH → MATIC)
+
+Cross-chain proposal lifecycle test
+
+2. Production
+ Mainnet Rollout
+
+Phase 1: Ethereum + Arbitrum
+
+Phase 2: Polygon + Base
+
+ Upgradeability
+
+Transparent proxy pattern
+
+File: contracts/upgrades/ProxyAdmin.sol
+
+Post-Launch Roadmap
+1. Q3 2025
+ Solana Support
+
+Neon EVM integration
+
+File: layerzero-solana.config.ts
+
+ NFT Governance
+
+ERC-721 voting power delegation
+
+2. Q4 2025
+ AI Proposal Drafting
+
+GPT-4 integration for proposal templates
+
+File: src/lib/ai-drafting.ts
+
+ Cross-Chain Delegation
+
+Vote delegation across chains
+
+Contract: DelegationManager.sol
+
+Metrics & KPIs
+Metric	Tool	Target
+Vote Success Rate	LayerZero Scan	99.9%
+Avg Gas/Vote	Custom Dashboard	≤$0.10
+Cross-Chain TX/Day	The Graph	500+
+Active DAOs	PostgreSQL	50+
+This checklist ensures strict alignment with LayerZero V2's technical requirements while maintaining modular development. Each item maps directly to the PRD specifications with explicit file references and integration points. Proceed phase-by-phase, validating LayerZero message flows at each step.
