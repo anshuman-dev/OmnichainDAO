@@ -13,9 +13,11 @@ import { useNetwork } from "@/hooks/useNetwork";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { getProvider, getTokenData, getWalletBalance, sendTokensAcrossChains } from "@/services/ethereum";
+import { ethers } from "ethers";
 
 export function useToken() {
-  const { isConnected, address } = useWallet();
+  const { isConnected, address, provider } = useWallet();
   const { currentNetwork } = useNetwork();
   const { toast } = useToast();
   
@@ -24,56 +26,71 @@ export function useToken() {
   const [chainDistribution, setChainDistribution] = useState<ChainDistribution[]>(INITIAL_CHAIN_DISTRIBUTION);
   const [supplyChecks, setSupplyChecks] = useState<SupplyCheck[]>(INITIAL_SUPPLY_CHECKS);
   const [contracts, setContracts] = useState<Contracts>(DEFAULT_CONTRACTS);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Fetch token stats and user balance when wallet or network changes
   useEffect(() => {
     const fetchTokenData = async () => {
-      if (isConnected && address && currentNetwork) {
+      if (currentNetwork) {
+        setIsLoading(true);
         try {
-          // In a real implementation, we would fetch this data from the blockchain
-          // or from an API provided by the backend
+          // Get provider based on current network
+          const ethProvider = getProvider(currentNetwork);
           
-          // For now, we'll use the constants as initial data and simulate
-          // a network-specific balance
-          const networkName = currentNetwork.name.toLowerCase();
+          // Get OFT contract data
+          const oftData = await getTokenData(contracts.oft, ethProvider);
           
-          if (networkName === 'ethereum') {
-            setUserBalance({
-              total: "1,000.00",
-              usdValue: "1,250.00"
-            });
-          } else if (networkName === 'polygon') {
-            setUserBalance({
-              total: "500.00",
-              usdValue: "625.00"
-            });
-          } else if (networkName === 'arbitrum') {
-            setUserBalance({
-              total: "250.00",
-              usdValue: "312.50"
-            });
-          } else if (networkName === 'base') {
-            setUserBalance({
-              total: "100.00",
-              usdValue: "125.00"
-            });
+          // Update token stats with real data
+          setTokenStats({
+            totalSupply: oftData.totalSupply,
+            price: tokenStats.price, // Still using mock price for now
+            volume: tokenStats.volume, // Still using mock volume for now
+            circulatingSupply: oftData.totalSupply // Assuming all tokens are circulating
+          });
+          
+          // If wallet is connected, fetch balance
+          if (isConnected && address) {
+            try {
+              const balance = await getWalletBalance(contracts.oft, address, ethProvider);
+              const balanceNumber = parseFloat(balance);
+              const balanceFormatted = balanceNumber.toLocaleString(undefined, { 
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              });
+              
+              // Calculate USD value assuming price is in USD
+              const usdValue = (balanceNumber * parseFloat(tokenStats.price)).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              });
+              
+              setUserBalance({
+                total: balanceFormatted,
+                usdValue: usdValue
+              });
+            } catch (error) {
+              console.error("Error fetching wallet balance:", error);
+              // Keep existing balance if there's an error
+            }
+          } else {
+            // Reset to default if not connected
+            setUserBalance(DEFAULT_USER_BALANCE);
           }
         } catch (error) {
           console.error("Error fetching token data:", error);
           toast({
             title: "Failed to load token data",
-            description: "Please try again later",
+            description: "Please try again later or ensure you are connected to the correct network",
             variant: "destructive",
           });
+        } finally {
+          setIsLoading(false);
         }
-      } else {
-        // Reset to default if not connected
-        setUserBalance(DEFAULT_USER_BALANCE);
       }
     };
     
     fetchTokenData();
-  }, [isConnected, address, currentNetwork, toast]);
+  }, [isConnected, address, currentNetwork, contracts.oft, toast, tokenStats.price, tokenStats.volume]);
   
   // Calculate bridge fees
   const calculateBridgeFees = useCallback((amount: number, destinationChainId: string): BridgeFees => {
@@ -88,7 +105,7 @@ export function useToken() {
     // In a real implementation, this would be estimated based on current gas prices
     let gasFee = 1.25;
     
-    if (destinationChainId === 'arbitrum' || destinationChainId === 'base') {
+    if (destinationChainId.includes('arbitrum') || destinationChainId.includes('base')) {
       gasFee = 0.85; // Lower gas fees for L2s
     }
     
@@ -133,33 +150,39 @@ export function useToken() {
         return;
       }
       
-      // In a real implementation, this would trigger a blockchain transaction
-      // For now, we'll simulate the process
+      if (!provider || !address) {
+        toast({
+          title: "Wallet error",
+          description: "Your wallet is not properly connected",
+          variant: "destructive",
+        });
+        return;
+      }
       
       toast({
-        title: "Bridging in progress",
-        description: `Bridging ${amount} OGV from ${currentNetwork.name} to ${destinationChainId}...`,
+        title: "Preparing transaction",
+        description: `Preparing to bridge ${amount} OGV from ${currentNetwork.name} to ${destinationChainId}...`,
       });
       
-      // Simulate a delay for the bridging process
+      // Here we would call the appropriate contract method to perform the bridge
+      // This would be a real transaction, requiring gas
+      
+      // For prototype purposes, we'll just simulate the API call
       setTimeout(() => {
         toast({
-          title: "Bridging successful",
-          description: `Successfully bridged ${amount} OGV to ${destinationChainId}`,
+          title: "Bridging initialized",
+          description: `Bridge request submitted. Transaction pending...`,
         });
         
-        // Update the user balance and chain distribution
-        // In a real implementation, this would happen after the transaction is confirmed
-        
-        // For this demo, we'll use the API to record the bridge transaction
+        // Record the bridge transaction
         apiRequest('POST', '/api/bridge', {
           amount,
           fromChain: currentNetwork.id,
           toChain: destinationChainId,
           walletAddress: address
         });
-        
-      }, 2000);
+      }, 1000);
+      
     } catch (error: any) {
       console.error("Error bridging tokens:", error);
       toast({
@@ -168,7 +191,7 @@ export function useToken() {
         variant: "destructive",
       });
     }
-  }, [isConnected, currentNetwork, toast, address]);
+  }, [isConnected, currentNetwork, toast, address, provider]);
   
   return {
     tokenStats,
@@ -176,6 +199,7 @@ export function useToken() {
     chainDistribution,
     supplyChecks,
     contracts,
+    isLoading,
     calculateBridgeFees,
     bridgeTokens
   };

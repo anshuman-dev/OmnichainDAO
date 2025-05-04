@@ -44,29 +44,29 @@ export const INITIAL_CHAIN_DISTRIBUTION: ChainDistribution[] = [
   }
 ];
 
-// Initial supply checks
+// Initial testnet supply checks
 export const INITIAL_SUPPLY_CHECKS: SupplyCheck[] = [
   {
     date: "2025-05-04",
-    chain: "Ethereum → Polygon",
+    chain: "Goerli → Mumbai",
     event: "checkSupply()",
     status: "Verified"
   },
   {
     date: "2025-05-03",
-    chain: "Arbitrum → Base",
+    chain: "Arbitrum Goerli → Base Goerli",
     event: "checkSupply()",
     status: "Verified"
   },
   {
     date: "2025-05-02",
-    chain: "All Chains",
+    chain: "All Testnets",
     event: "dailyAudit()",
     status: "Verified"
   },
   {
     date: "2025-05-01",
-    chain: "Polygon → Arbitrum",
+    chain: "Mumbai → Arbitrum Goerli",
     event: "checkSupply()",
     status: "Reconciled"
   }

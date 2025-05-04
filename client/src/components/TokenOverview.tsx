@@ -2,7 +2,7 @@ import { useToken } from "@/hooks/useToken";
 import { ChainDistribution, SupplyCheck } from "@/types/token";
 
 export default function TokenOverview() {
-  const { tokenStats, chainDistribution, supplyChecks } = useToken();
+  const { tokenStats, chainDistribution, supplyChecks, isLoading } = useToken();
   
   // Chain distribution color mapping
   const chainColors: Record<string, string> = {
