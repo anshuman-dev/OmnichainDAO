@@ -1,205 +1,205 @@
 import { ethers } from 'ethers';
 import { Network } from '@/types/token';
+import OFTAbi from '@/contracts/OFTAbi.json';
+import { LZ_NETWORKS } from './layerzero';
 
-// ABI for OFT contract (simplified for this example)
-const oftAbi = [
-  "function name() view returns (string)",
-  "function symbol() view returns (string)",
-  "function decimals() view returns (uint8)",
-  "function totalSupply() view returns (uint256)",
-  "function balanceOf(address owner) view returns (uint256)",
-  "function sendFrom(address _from, uint16 _dstChainId, bytes _toAddress, uint256 _amount) payable"
-];
-
+// Get an ethers provider for a specific network
 export const getProvider = (network: Network) => {
+  // Default RPC endpoints for testnets
+  const rpcUrls: Record<number, string> = {
+    5: 'https://ethereum-goerli.publicnode.com', // Ethereum Goerli
+    80001: 'https://polygon-mumbai.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161', // Polygon Mumbai
+    421613: 'https://goerli-rollup.arbitrum.io/rpc', // Arbitrum Goerli
+    84531: 'https://goerli.base.org' // Base Goerli
+  };
+  
   try {
-    // If MetaMask or other web3 provider is available, use it
-    if (window.ethereum) {
-      return new ethers.BrowserProvider(window.ethereum);
+    // Check if we have a specific RPC URL for this network
+    if (rpcUrls[network.chainId]) {
+      return new ethers.JsonRpcProvider(rpcUrls[network.chainId]);
     }
     
-    // Otherwise, fall back to public RPC endpoints
-    // Note: You might want to use your own API keys for production
-    // These are for demonstration only
-    const infuraApiKey = "9aa3d95b3bc440fa88ea12eaa4456161"; // Public infura key
+    // Fallback: try to use default providers if no specific RPC URL is defined
+    console.warn(`No RPC URL defined for chainId ${network.chainId}, using default providers`);
     
-    switch (network.id) {
-      case 'ethereum-goerli':
-        return new ethers.JsonRpcProvider(`https://goerli.infura.io/v3/${infuraApiKey}`);
-      case 'polygon-mumbai':
-        return new ethers.JsonRpcProvider(`https://polygon-mumbai.infura.io/v3/${infuraApiKey}`);
-      case 'arbitrum-goerli':
-        return new ethers.JsonRpcProvider(`https://arbitrum-goerli.infura.io/v3/${infuraApiKey}`);
-      case 'base-goerli':
-        return new ethers.JsonRpcProvider('https://goerli.base.org');
-      default:
-        console.warn(`No specific provider for network: ${network.id}, using Goerli as fallback`);
-        return new ethers.JsonRpcProvider(`https://goerli.infura.io/v3/${infuraApiKey}`);
-    }
+    // Return a fallback provider (only works for mainnet and some public testnets)
+    return ethers.getDefaultProvider(network.chainId);
   } catch (error) {
-    console.error('Error getting provider:', error);
-    // Return a fallback provider that will handle errors gracefully
-    return {
-      getNetwork: () => Promise.reject(new Error("Network unavailable")),
-      call: () => Promise.reject(new Error("Network unavailable"))
-    } as unknown as ethers.Provider;
+    console.error(`Error creating provider for network ${network.id}:`, error);
+    throw new Error(`Failed to initialize provider for ${network.name}`);
   }
 };
 
+// Get the contract instance for an OFT token
 export const getOftContract = (contractAddress: string, provider: ethers.Provider) => {
   try {
-    return new ethers.Contract(contractAddress, oftAbi, provider);
+    return new ethers.Contract(contractAddress, OFTAbi, provider);
   } catch (error) {
-    console.error('Error getting OFT contract:', error);
+    console.error("Error getting OFT contract:", error);
     throw error;
   }
 };
 
+// Get token data including name, symbol, and decimals
 export const getTokenData = async (contractAddress: string, provider: ethers.Provider) => {
   try {
-    // First check if the provider is connected
-    try {
-      await provider.getNetwork();
-    } catch (error) {
-      console.error('Provider not connected:', error);
-      return {
-        name: "OmniGovern",
-        symbol: "OGV",
-        decimals: 18,
-        totalSupply: "100,000,000" // Default value if we can't connect
-      };
-    }
-    
     const contract = getOftContract(contractAddress, provider);
     
-    try {
-      const [name, symbol, decimals, totalSupply] = await Promise.all([
-        contract.name(),
-        contract.symbol(),
-        contract.decimals(),
-        contract.totalSupply()
-      ]);
-      
-      // Format total supply with commas
-      const formattedTotalSupply = ethers.formatUnits(totalSupply, decimals);
-      const numberWithCommas = Number(formattedTotalSupply).toLocaleString();
-      
-      return {
-        name,
-        symbol,
-        decimals,
-        totalSupply: numberWithCommas
-      };
-    } catch (contractError) {
-      console.error('Error reading contract data:', contractError);
-      // Return default values if contract interaction fails
-      return {
-        name: "OmniGovern",
-        symbol: "OGV",
-        decimals: 18,
-        totalSupply: "100,000,000" // Default value if contract interaction fails
-      };
-    }
+    // Get token data in parallel
+    const [name, symbol, decimals, totalSupply] = await Promise.all([
+      contract.name(),
+      contract.symbol(),
+      contract.decimals(),
+      contract.totalSupply()
+    ]);
+    
+    return {
+      name,
+      symbol,
+      decimals,
+      totalSupply: ethers.formatUnits(totalSupply, decimals)
+    };
   } catch (error) {
-    console.error('Error getting token data:', error);
-    // Return default values if all else fails
+    console.error("Error reading contract data:", error);
+    // Return default values if contract interaction fails
     return {
       name: "OmniGovern",
       symbol: "OGV",
       decimals: 18,
-      totalSupply: "100,000,000" // Default value
+      totalSupply: "100000000.0"
     };
   }
 };
 
+// Get the balance of tokens for a specific wallet address
 export const getWalletBalance = async (
-  contractAddress: string, 
   walletAddress: string,
+  contractAddress: string,
   provider: ethers.Provider
 ) => {
   try {
-    // Check if the provider is connected
-    try {
-      await provider.getNetwork();
-    } catch (error) {
-      console.error('Provider not connected when getting balance:', error);
-      return "0.00"; // Default value if we can't connect
-    }
-    
     const contract = getOftContract(contractAddress, provider);
     
-    try {
-      const [balance, decimals] = await Promise.all([
-        contract.balanceOf(walletAddress),
-        contract.decimals()
-      ]);
-      
-      const formattedBalance = ethers.formatUnits(balance, decimals);
-      return formattedBalance;
-    } catch (contractError) {
-      console.error('Error reading wallet balance from contract:', contractError);
-      return "0.00"; // Default value if contract interaction fails
-    }
+    // Get balance and decimals
+    const [balance, decimals] = await Promise.all([
+      contract.balanceOf(walletAddress),
+      contract.decimals()
+    ]);
+    
+    // Format balance based on decimals
+    return ethers.formatUnits(balance, decimals);
   } catch (error) {
-    console.error('Error getting wallet balance:', error);
-    return "0.00"; // Default value if all else fails
+    console.error("Error getting wallet balance:", error);
+    return "0";
   }
 };
 
+// Estimate LayerZero fee for cross-chain transfer
 export const estimateLayerZeroFee = async (
-  oftContractAddress: string,
-  fromAddress: string, 
-  dstChainId: number, 
-  toAddress: string, 
+  srcChainId: number,
+  dstChainId: number,
+  walletAddress: string,
   amount: string,
   provider: ethers.Provider
 ) => {
   try {
-    // In a real implementation, we would call the estimateSendFee function on the OFT contract
-    // For this example, we'll return a fixed fee
-    return ethers.parseEther('0.001');
+    // Find the network info for source and destination chains
+    const srcNetworkInfo = Object.values(LZ_NETWORKS).find(n => n.chainId === srcChainId);
+    const dstNetworkInfo = Object.values(LZ_NETWORKS).find(n => n.chainId === dstChainId);
+    
+    if (!srcNetworkInfo || !dstNetworkInfo) {
+      throw new Error("Source or destination network not supported");
+    }
+    
+    const contract = getOftContract(srcNetworkInfo.oftAddress, provider);
+    
+    // Convert destination address to bytes
+    const dstAddressBytes = ethers.toUtf8Bytes(walletAddress);
+    
+    // Convert amount to Wei based on decimals
+    const decimals = await contract.decimals();
+    const amountInWei = ethers.parseUnits(amount, decimals);
+    
+    // Estimate fee
+    const [nativeFee, zroFee] = await contract.estimateSendFee(
+      dstNetworkInfo.lzChainId,
+      dstAddressBytes,
+      amountInWei,
+      false, // don't use ZRO tokens for fees
+      '0x' // default adapter params
+    );
+    
+    return {
+      nativeFee: ethers.formatEther(nativeFee),
+      zroFee: ethers.formatEther(zroFee)
+    };
   } catch (error) {
-    console.error('Error estimating LayerZero fee:', error);
-    throw error;
+    console.error("Error estimating LayerZero fee:", error);
+    // Return default values if estimation fails
+    return {
+      nativeFee: "0.01",
+      zroFee: "0"
+    };
   }
 };
 
+// Send tokens from one chain to another
 export const sendTokensAcrossChains = async (
-  oftContractAddress: string,
-  fromAddress: string,
+  srcChainId: number,
   dstChainId: number,
-  toAddress: string,
   amount: string,
   signer: ethers.Signer
 ) => {
   try {
-    const contract = new ethers.Contract(oftContractAddress, oftAbi, signer);
+    // Get the wallet address
+    const walletAddress = await signer.getAddress();
     
-    // Convert amount to wei
-    const amountWei = ethers.parseEther(amount);
+    // Find the network info for source and destination chains
+    const srcNetworkInfo = Object.values(LZ_NETWORKS).find(n => n.chainId === srcChainId);
+    const dstNetworkInfo = Object.values(LZ_NETWORKS).find(n => n.chainId === dstChainId);
     
-    // Estimate the fee
-    const fee = await estimateLayerZeroFee(
-      oftContractAddress,
-      fromAddress,
-      dstChainId,
-      toAddress,
-      amount,
-      signer.provider as ethers.Provider
+    if (!srcNetworkInfo || !dstNetworkInfo) {
+      throw new Error("Source or destination network not supported");
+    }
+    
+    // Get the contract with signer
+    const contract = new ethers.Contract(srcNetworkInfo.oftAddress, OFTAbi, signer);
+    
+    // Convert destination address to bytes
+    const dstAddressBytes = ethers.toUtf8Bytes(walletAddress);
+    
+    // Convert amount to Wei based on decimals
+    const decimals = await contract.decimals();
+    const amountInWei = ethers.parseUnits(amount, decimals);
+    
+    // Estimate fees first
+    const [nativeFee, zroFee] = await contract.estimateSendFee(
+      dstNetworkInfo.lzChainId,
+      dstAddressBytes,
+      amountInWei,
+      false, // don't use ZRO tokens for fees
+      '0x' // default adapter params
     );
     
-    // Send transaction with the fee
+    // Add a buffer to the fee (10% more)
+    const feeWithBuffer = nativeFee.mul(110).div(100);
+    
+    // Send the tokens
     const tx = await contract.sendFrom(
-      fromAddress,
-      dstChainId,
-      ethers.toUtf8Bytes(toAddress),
-      amountWei,
-      { value: fee }
+      walletAddress,
+      dstNetworkInfo.lzChainId,
+      dstAddressBytes,
+      amountInWei,
+      walletAddress, // refund address (same as sender)
+      ethers.ZeroAddress, // zero address for zro payment address
+      '0x', // default adapter params
+      { value: feeWithBuffer }
     );
     
-    return tx;
+    // Wait for transaction to be mined
+    return await tx.wait();
   } catch (error) {
-    console.error('Error sending tokens across chains:', error);
+    console.error("Error sending tokens across chains:", error);
     throw error;
   }
 };
