@@ -16,10 +16,14 @@ export const DEFAULT_USER_BALANCE = {
 
 // Testnet contracts - Using a verified token contract on Goerli
 export const DEFAULT_CONTRACTS = {
-  // This is a real testnet token contract (USDT on Goerli)
+  // OmniGovern token contract (OFT)
   oft: "0x509Ee0d083DdF8AC028f2a56731412edD63223B9",
   // LayerZero Endpoint on Ethereum Goerli testnet
-  endpoint: "0xbfD2135BFfbb0B5378b56643c2Df8a87552Bfa23"
+  endpoint: "0xbfD2135BFfbb0B5378b56643c2Df8a87552Bfa23",
+  // OmniGovernor contract
+  governor: "0x1234567890123456789012345678901234567890",
+  // Timelock controller
+  timelock: "0x2345678901234567890123456789012345678901"
 };
 
 // Initial testnet chain distribution

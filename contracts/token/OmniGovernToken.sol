@@ -2,29 +2,30 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@layerzerolabs/lz-evm-v1-0.7/contracts/token/oft/v2/OFTCoreV2.sol";
-import "@layerzerolabs/lz-evm-v1-0.7/contracts/token/oft/v2/OFTV2.sol";
+import "@layerzerolabs/lz-evm-v1-0.7/contracts/token/oft/OFT.sol";
 import "../interfaces/IOmniGovernToken.sol";
 
 /**
  * @title OmniGovernToken
- * @dev Implementation of the OmniGovernToken - a governance token that can be transferred across chains
- * using LayerZero OFT (Omnichain Fungible Token) standard
+ * @dev Implementation of the OmniGovern DAO token with cross-chain capabilities
+ * using LayerZero's OFT (Omnichain Fungible Token) standard
  */
-contract OmniGovernToken is OFTV2, ERC20Votes, Ownable {
-    uint256 public constant BRIDGE_FEE_DENOMINATOR = 1000000; // 6 decimals for precision
-    uint256 public bridgeFeeRate; // Fee rate in parts per BRIDGE_FEE_DENOMINATOR (e.g., 1000 = 0.1%)
+contract OmniGovernToken is IOmniGovernToken, OFT, ERC20Votes, Ownable {
+    // Bridge fee rate (denominator is 1,000,000)
+    uint256 private _bridgeFeeRate;
+    
+    // Accumulated bridge fees
+    uint256 private _accumulatedBridgeFees;
     
     /**
      * @dev Constructor for OmniGovernToken
      * @param _name Token name
      * @param _symbol Token symbol
-     * @param _lzEndpoint LayerZero endpoint contract address
-     * @param _owner Owner of the contract
-     * @param _initialSupply Initial token supply to mint
-     * @param _bridgeFeeRate Initial bridge fee rate (in parts per BRIDGE_FEE_DENOMINATOR)
+     * @param _lzEndpoint LayerZero endpoint address
+     * @param _owner Owner of the token contract
+     * @param _initialSupply Initial token supply (all minted to the owner)
+     * @param _initialBridgeFeeRate Initial bridge fee rate
      */
     constructor(
         string memory _name,
@@ -32,101 +33,177 @@ contract OmniGovernToken is OFTV2, ERC20Votes, Ownable {
         address _lzEndpoint,
         address _owner,
         uint256 _initialSupply,
-        uint256 _bridgeFeeRate
-    ) 
+        uint256 _initialBridgeFeeRate
+    )
         ERC20(_name, _symbol)
         ERC20Permit(_name)
-        OFTV2(_name, _symbol, 18, _lzEndpoint)
+        OFT(_lzEndpoint)
         Ownable(_owner)
     {
-        require(_bridgeFeeRate <= BRIDGE_FEE_DENOMINATOR, "OmniGovernToken: Bridge fee too high");
-        bridgeFeeRate = _bridgeFeeRate;
+        require(_initialBridgeFeeRate <= 10000, "OmniGovernToken: Bridge fee rate too high");
+        _bridgeFeeRate = _initialBridgeFeeRate;
         
         // Mint initial supply to the owner
         _mint(_owner, _initialSupply);
     }
     
     /**
-     * @dev Set the bridge fee rate
-     * @param _newBridgeFeeRate New bridge fee rate (in parts per BRIDGE_FEE_DENOMINATOR)
+     * @dev Override to support both OFT and ERC20Votes
      */
-    function setBridgeFeeRate(uint256 _newBridgeFeeRate) external onlyOwner {
-        require(_newBridgeFeeRate <= BRIDGE_FEE_DENOMINATOR, "OmniGovernToken: Bridge fee too high");
-        bridgeFeeRate = _newBridgeFeeRate;
-    }
-    
-    /**
-     * @dev Get the current bridge fee percentage
-     * @return Current bridge fee rate
-     */
-    function getBridgeFee() external view returns (uint256) {
-        return bridgeFeeRate;
-    }
-    
-    /**
-     * @dev Send tokens from one chain to another
-     * @param _from Address to send tokens from
-     * @param _dstChainId LayerZero destination chain ID
-     * @param _toAddress Destination address (converted to bytes)
-     * @param _amount Amount of tokens to send
-     * @param _refundAddress Address to refund excess fees to
-     * @param _zroPaymentAddress Address to pay ZRO fees (usually zero)
-     * @param _adapterParams Adapter parameters for execution
-     */
-    function sendFrom(
-        address _from,
-        uint16 _dstChainId,
-        bytes calldata _toAddress,
-        uint256 _amount,
-        address payable _refundAddress,
-        address _zroPaymentAddress,
-        bytes calldata _adapterParams
-    ) public payable virtual override {
-        // Calculate bridge fee
-        uint256 bridgeFee = (_amount * bridgeFeeRate) / BRIDGE_FEE_DENOMINATOR;
-        
-        // Check if enough native token is provided to cover bridge fee
-        require(msg.value >= bridgeFee, "OmniGovernToken: Insufficient fee");
-        
-        // Transfer bridge fee to owner
-        if (bridgeFee > 0) {
-            (bool success, ) = owner().call{value: bridgeFee}("");
-            require(success, "OmniGovernToken: Fee transfer failed");
-        }
-        
-        // Call parent sendFrom with the remaining msg.value
-        super.sendFrom{value: msg.value - bridgeFee}(
-            _from,
-            _dstChainId,
-            _toAddress,
-            _amount,
-            _refundAddress,
-            _zroPaymentAddress,
-            _adapterParams
-        );
-    }
-    
-    // Override required functions to make ERC20Votes and OFTV2 compatible
-    
     function _update(address from, address to, uint256 value) internal override(ERC20, ERC20Votes) {
         super._update(from, to, value);
     }
     
-    function nonces(address owner) public view override(ERC20Permit, Nonces) returns (uint256) {
+    /**
+     * @dev Override to support both OFT and ERC20Votes
+     */
+    function nonces(address owner)
+        public
+        view
+        override(ERC20Permit, Nonces)
+        returns (uint256)
+    {
         return super.nonces(owner);
     }
     
-    // Required override for OFTV2 compatibility
-    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-        return interfaceId == type(IOFTV2).interfaceId || interfaceId == type(IERC20).interfaceId;
+    /**
+     * @dev Get the bridge fee for a specific amount
+     * @param amount The amount being bridged
+     * @return The fee amount
+     */
+    function getBridgeFee(uint256 amount) public view override returns (uint256) {
+        return (amount * _bridgeFeeRate) / 1_000_000;
     }
     
-    // Implement circulatingSupply for OFTV2
-    function circulatingSupply() public view virtual override returns (uint256) {
-        return totalSupply();
+    /**
+     * @dev Send tokens to another chain
+     * @param dstChainId The destination chain ID
+     * @param to The recipient address
+     * @param amount The amount to send
+     * @param refundAddress The address to refund excess fees to
+     * @param zroPaymentAddress The ZRO payment address (if applicable)
+     * @param adapterParams Additional parameters for the adapter
+     */
+    function sendTokens(
+        uint16 dstChainId,
+        bytes32 to,
+        uint256 amount,
+        address payable refundAddress,
+        address zroPaymentAddress,
+        bytes calldata adapterParams
+    ) external payable override {
+        // Calculate and deduct bridge fee
+        uint256 fee = getBridgeFee(amount);
+        uint256 amountAfterFee = amount - fee;
+        
+        // Update accumulated fees
+        _accumulatedBridgeFees += fee;
+        
+        // Send tokens to the destination chain
+        _send(
+            msg.sender,
+            dstChainId,
+            to,
+            amountAfterFee,
+            refundAddress,
+            zroPaymentAddress,
+            adapterParams
+        );
+        
+        emit TokensSent(msg.sender, dstChainId, to, amount, fee, amountAfterFee);
     }
     
-    function token() public view virtual override returns (address) {
-        return address(this);
+    /**
+     * @dev Set the bridge fee rate
+     * @param newBridgeFeeRate The new bridge fee rate
+     */
+    function setBridgeFeeRate(uint256 newBridgeFeeRate) external override onlyOwner {
+        require(newBridgeFeeRate <= 10000, "OmniGovernToken: Bridge fee rate too high");
+        _bridgeFeeRate = newBridgeFeeRate;
+        emit BridgeFeeRateChanged(_bridgeFeeRate, newBridgeFeeRate);
     }
+    
+    /**
+     * @dev Get the current bridge fee rate
+     * @return The current bridge fee rate
+     */
+    function bridgeFeeRate() external view override returns (uint256) {
+        return _bridgeFeeRate;
+    }
+    
+    /**
+     * @dev Get the accumulated bridge fees
+     * @return The accumulated bridge fees
+     */
+    function accumulatedBridgeFees() external view returns (uint256) {
+        return _accumulatedBridgeFees;
+    }
+    
+    /**
+     * @dev Withdraw accumulated bridge fees
+     * @param to The address to send the fees to
+     */
+    function withdrawBridgeFees(address to) external override onlyOwner {
+        require(_accumulatedBridgeFees > 0, "OmniGovernToken: No fees to withdraw");
+        require(to != address(0), "OmniGovernToken: Cannot withdraw to zero address");
+        
+        uint256 amount = _accumulatedBridgeFees;
+        _accumulatedBridgeFees = 0;
+        
+        _transfer(address(this), to, amount);
+        
+        emit BridgeFeesWithdrawn(to, amount);
+    }
+    
+    /**
+     * @dev Override this function to circumvent the OFT standard's fee mechanism
+     * since we implement our own fee system
+     */
+    function _debitFrom(
+        address from, 
+        uint16, 
+        bytes memory, 
+        uint256 amount
+    ) internal override returns (uint256) {
+        require(from == _msgSender(), "OmniGovernToken: Sender must be the from address");
+        
+        // Burn tokens from the sender directly
+        _burn(from, amount);
+        
+        // Return the amount after token-level fee (0 for now)
+        return amount;
+    }
+    
+    /**
+     * @dev Override this function to handle the received tokens on the destination chain
+     */
+    function _creditTo(
+        uint16, 
+        address toAddress, 
+        uint256 amount
+    ) internal override returns (uint256) {
+        // Mint tokens to the recipient
+        _mint(toAddress, amount);
+        
+        // Return the amount received
+        return amount;
+    }
+    
+    /**
+     * @dev Called by the OFT protocol to handle an incoming packet
+     */
+    function _nonblockingLzReceive(
+        uint16 srcChainId,
+        bytes memory srcAddress,
+        uint64 nonce,
+        bytes memory payload
+    ) internal override {
+        // Let OFT handle the token transfer
+        super._nonblockingLzReceive(srcChainId, srcAddress, nonce, payload);
+    }
+    
+    // Events
+    event TokensSent(address indexed from, uint16 indexed dstChainId, bytes32 indexed to, uint256 amount, uint256 fee, uint256 amountAfterFee);
+    event BridgeFeeRateChanged(uint256 oldRate, uint256 newRate);
+    event BridgeFeesWithdrawn(address indexed to, uint256 amount);
 }
