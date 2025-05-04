@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function ContractDetails() {
   const { contracts } = useToken();
   const { toast } = useToast();
+  const [showV2Info, setShowV2Info] = useState(false);
   
   const copyToClipboard = async (text: string, label: string) => {
     try {
@@ -24,7 +25,24 @@ export default function ContractDetails() {
   
   return (
     <div className="lz-card">
-      <h2 className="text-xl mb-4">Contract Details</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl">Contract Details</h2>
+        <div 
+          className="cursor-pointer text-primary-500 hover:underline flex items-center"
+          onClick={() => setShowV2Info(!showV2Info)}
+        >
+          {showV2Info ? "Hide V2 Info" : "Show V2 Info"}
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            className={`h-4 w-4 ml-1 transition-transform ${showV2Info ? 'rotate-180' : ''}`} 
+            fill="none" 
+            viewBox="0 0 24 24" 
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
       
       <div className="space-y-4">
         <div>
@@ -56,6 +74,39 @@ export default function ContractDetails() {
             </button>
           </div>
         </div>
+        
+        {showV2Info && (
+          <div className="mt-4 bg-black/30 rounded-lg p-4 border border-[#323232]">
+            <h3 className="text-md font-medium mb-3">LayerZero V2 Features</h3>
+            
+            <ul className="space-y-2 text-sm">
+              <li className="flex items-start">
+                <svg className="h-5 w-5 text-primary-500 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span><strong>OApp Architecture:</strong> Makes building omnichain applications simpler with standardized interfaces</span>
+              </li>
+              <li className="flex items-start">
+                <svg className="h-5 w-5 text-primary-500 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span><strong>DVNs:</strong> Decentralized Verifier Networks provide enhanced security for cross-chain messages</span>
+              </li>
+              <li className="flex items-start">
+                <svg className="h-5 w-5 text-primary-500 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span><strong>Executor:</strong> Improved executor system that reduces gas costs for cross-chain message delivery</span>
+              </li>
+              <li className="flex items-start">
+                <svg className="h-5 w-5 text-primary-500 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span><strong>MessagingComposer:</strong> Allows for atomic multi-message execution in a single transaction</span>
+              </li>
+            </ul>
+          </div>
+        )}
         
         <div>
           <div className="secondary-text text-sm mb-1">Implementation</div>

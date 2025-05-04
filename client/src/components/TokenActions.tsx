@@ -69,14 +69,23 @@ export default function TokenActions({ openWalletModal }: TokenActionsProps) {
     setDestinationChain(e.target.value);
   };
   
-  const handleBridgeTokens = () => {
+  const handleBridgeTokens = async () => {
     if (!isConnected) {
       openWalletModal();
       return;
     }
     
     if (amount && destinationChain) {
-      bridgeTokens(parseFloat(amount), destinationChain);
+      try {
+        setIsBridging(true);
+        await bridgeTokens(parseFloat(amount), destinationChain);
+        // Clear amount after successful bridge
+        setAmount("");
+      } catch (error) {
+        console.error("Error bridging tokens:", error);
+      } finally {
+        setIsBridging(false);
+      }
     }
   };
   
@@ -155,29 +164,53 @@ export default function TokenActions({ openWalletModal }: TokenActionsProps) {
           
           {/* Gas Estimation */}
           <div className="bg-black rounded-lg p-4 mb-6 border border-[#323232]">
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-sm secondary-text">LayerZero Fee</span>
-              <span className="text-sm font-['Roboto_Mono']">≈ ${fees.layerZeroFee.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-sm secondary-text">Bridge Fee (0.1%)</span>
-              <span className="text-sm font-['Roboto_Mono']">≈ ${fees.bridgeFee.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between items-center mb-1">
-              <span className="text-sm secondary-text">Gas Fee</span>
-              <span className="text-sm font-['Roboto_Mono']">≈ ${fees.gasFee.toFixed(2)}</span>
-            </div>
-            <div className="border-t border-[#323232] mt-2 pt-2 flex justify-between items-center">
-              <span className="text-sm secondary-text">Total Cost</span>
-              <span className="font-medium font-['Roboto_Mono']">≈ ${fees.totalCost.toFixed(2)}</span>
-            </div>
+            {calculatingFees ? (
+              <div className="flex flex-col items-center py-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
+                <span className="text-sm">Calculating fees...</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm secondary-text">LayerZero Fee</span>
+                  <span className="text-sm font-['Roboto_Mono']">≈ ${fees.layerZeroFee.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm secondary-text">Bridge Fee (0.1%)</span>
+                  <span className="text-sm font-['Roboto_Mono']">≈ ${fees.bridgeFee.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm secondary-text">Gas Fee</span>
+                  <span className="text-sm font-['Roboto_Mono']">≈ ${fees.gasFee.toFixed(2)}</span>
+                </div>
+                <div className="border-t border-[#323232] mt-2 pt-2 flex justify-between items-center">
+                  <span className="text-sm secondary-text">Total Cost</span>
+                  <span className="font-medium font-['Roboto_Mono']">≈ ${fees.totalCost.toFixed(2)}</span>
+                </div>
+              </>
+            )}
           </div>
           
           <button 
-            className="lz-button w-full py-3"
+            className={`lz-button w-full py-3 ${isBridging || tokenLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
             onClick={handleBridgeTokens}
+            disabled={isBridging || tokenLoading}
           >
-            {isConnected ? "Bridge Tokens" : "Connect Wallet to Bridge"}
+            {!isConnected ? (
+              "Connect Wallet to Bridge"
+            ) : isBridging ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                <span>Bridging...</span>
+              </div>
+            ) : tokenLoading ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                <span>Loading...</span>
+              </div>
+            ) : (
+              "Bridge Tokens"
+            )}
           </button>
         </div>
       </div>
