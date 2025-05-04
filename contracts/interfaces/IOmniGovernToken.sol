@@ -1,77 +1,58 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
-
 /**
  * @title IOmniGovernToken
- * @dev Interface for the OmniGovernToken contract used by OmniGovern DAO
+ * @dev Interface for the OmniGovernToken contract
  */
-interface IOmniGovernToken is IERC20Metadata, IERC20Permit {
+interface IOmniGovernToken {
     /**
-     * @dev Send tokens from one chain to another
-     * @param _from Address to send tokens from
-     * @param _dstChainId LayerZero destination chain ID
-     * @param _toAddress Destination address (converted to bytes)
-     * @param _amount Amount of tokens to send
-     * @param _refundAddress Address to refund excess fees to
-     * @param _zroPaymentAddress Address to pay ZRO fees (usually zero)
-     * @param _adapterParams Adapter parameters for execution
+     * @dev Get the bridge fee for a specific amount
+     * @param amount The amount being bridged
+     * @return The fee amount
      */
-    function sendFrom(
-        address _from,
-        uint16 _dstChainId,
-        bytes calldata _toAddress,
-        uint256 _amount,
-        address payable _refundAddress,
-        address _zroPaymentAddress,
-        bytes calldata _adapterParams
+    function getBridgeFee(uint256 amount) external view returns (uint256);
+    
+    /**
+     * @dev Send tokens to another chain
+     * @param dstChainId The destination chain ID
+     * @param to The recipient address
+     * @param amount The amount to send
+     * @param refundAddress The address to refund excess fees to
+     * @param zroPaymentAddress The ZRO payment address (if applicable)
+     * @param adapterParams Additional parameters for the adapter
+     */
+    function sendTokens(
+        uint16 dstChainId,
+        bytes32 to,
+        uint256 amount,
+        address payable refundAddress,
+        address zroPaymentAddress,
+        bytes calldata adapterParams
     ) external payable;
     
     /**
-     * @dev Estimate fee for sending tokens to another chain
-     * @param _dstChainId LayerZero destination chain ID
-     * @param _toAddress Destination address (converted to bytes)
-     * @param _amount Amount of tokens to send
-     * @param _useZro Whether to use ZRO token for fees (usually false)
-     * @param _adapterParams Adapter parameters for execution
-     * @return nativeFee Fee in native gas token
-     * @return zroFee Fee in ZRO tokens
+     * @dev Set trusted remote address for a chain
+     * @param remoteChainId The remote chain ID
+     * @param path The path to the remote contract
      */
-    function estimateSendFee(
-        uint16 _dstChainId,
-        bytes calldata _toAddress,
-        uint256 _amount,
-        bool _useZro,
-        bytes calldata _adapterParams
-    ) external view returns (uint256 nativeFee, uint256 zroFee);
+    function setTrustedRemote(uint16 remoteChainId, bytes calldata path) external;
     
     /**
-     * @dev Get bridge fee percentage
-     * @return Current bridge fee as a percentage (e.g., 0.1% = 1000)
+     * @dev Set the bridge fee rate
+     * @param newBridgeFeeRate The new bridge fee rate
      */
-    function getBridgeFee() external view returns (uint256);
+    function setBridgeFeeRate(uint256 newBridgeFeeRate) external;
     
     /**
-     * @dev Request delegation of votes
-     * @param delegatee Address to delegate votes to
+     * @dev Get the current bridge fee rate
+     * @return The current bridge fee rate
      */
-    function delegate(address delegatee) external;
+    function bridgeFeeRate() external view returns (uint256);
     
     /**
-     * @dev Get current votes for an account
-     * @param account Address to get votes for
-     * @return Current votes the account has
+     * @dev Withdraw accumulated bridge fees
+     * @param to The address to send the fees to
      */
-    function getVotes(address account) external view returns (uint256);
-    
-    /**
-     * @dev Get past votes for an account at a specific block number
-     * @param account Address to get votes for
-     * @param blockNumber Block number to get votes at
-     * @return Past votes the account had at the specified block
-     */
-    function getPastVotes(address account, uint256 blockNumber) external view returns (uint256);
+    function withdrawBridgeFees(address to) external;
 }
