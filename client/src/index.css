@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 4%;
+  --foreground: 0 0% 95%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 0 0% 46%;
+  --popover: 0 0% 6%;
+  --popover-foreground: 0 0% 95%;
+  --card: 0 0% 6%;
+  --card-foreground: 0 0% 95%;
+  --border: 240 3.7% 19%;
+  --input: 240 3.7% 15.9%;
+  --primary: 0 0% 95%;
+  --primary-foreground: 0 0% 6%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 95%;
+  --accent: 0 0% 100%;
+  --accent-foreground: 0 0% 6%;
+  --destructive: 0 70% 50%;
+  --destructive-foreground: 0 0% 95%;
+  --ring: 240 3.7% 19%;
+  --radius: 0.5rem;
+  
+  /* LayerZero specific colors */
+  --lz-black: 0 0% 4%;
+  --lz-black-lighter: 0 0% 6%;
+  --lz-text-primary: 0 0% 95%;
+  --lz-text-secondary: 0 0% 46%;
+  --lz-text-tertiary: 0 0% 32%;
+  --lz-line: 0 0% 19%;
+  --lz-code-string: 211 88% 69%;
+  --lz-code-keyword: 270 100% 75%;
+  --lz-code-error: 0 100% 70%;
+  --lz-code-function: 50 85% 58%;
+  --lz-code-comment: 250 14% 57%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-[#0A0A0A] text-[#F2F2F2] font-sans antialiased;
+  }
+  
+  .uppercase-label {
+    @apply text-xs font-medium uppercase tracking-wider;
+  }
+  
+  .line-pattern {
+    background-image: repeating-linear-gradient(90deg, #323232, #323232 1px, transparent 1px, transparent 20px);
+    opacity: 0.2;
+  }
+  
+  /* Network status indicator animation */
+  @keyframes pulse {
+    0% {
+      transform: scale(0.95);
+      opacity: 0.8;
+    }
+    70% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(0.95);
+      opacity: 0.8;
+    }
+  }
+  
+  .network-active {
+    animation: pulse 2s infinite;
+  }
+}
+
+@layer components {
+  .lz-border {
+    @apply border border-[#323232];
+  }
+  
+  .lz-card {
+    @apply bg-[#101010] lz-border rounded-xl;
+  }
+}
