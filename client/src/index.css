@@ -1,41 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: 0 0% 4%;
+  /* Base colors from LayerZero brand guide */
+  --background: 0 0% 0%;
   --foreground: 0 0% 95%;
-  --muted: 240 3.7% 15.9%;
+  
+  /* LayerZero typography colors */
+  --primary-text: 0 0% 95%; /* #F2F2F2 - Primary white */
+  --secondary-text: 0 0% 46%; /* #757575 - Secondary gray */
+  --tertiary-text: 0 0% 32%; /* #525252 - Tertiary dark gray */
+  
+  /* LayerZero UI colors */
+  --card-bg: 0 0% 4%; /* #0A0A0A - Black lighter */
+  --border-color: 0 0% 19%; /* #323232 - Border */
+  
+  /* Code syntax colors from brand guide */
+  --code-string: 195 59% 58%; /* #6CADF5 - Light blue */
+  --code-keyword: 270 52% 71%; /* #A77DFF - Purple */
+  --code-error: 0 81% 67%; /* #F5686B - Red */
+  --code-function: 48 85% 58%; /* #F1DF38 - Yellow */
+  --code-comment: 0 0% 46%; /* #757575 - Gray */
+  
+  /* ShadCN UI System Colors */
+  --muted: 0 0% 10%;
   --muted-foreground: 0 0% 46%;
-  --popover: 0 0% 6%;
+  --popover: 0 0% 4%;
   --popover-foreground: 0 0% 95%;
-  --card: 0 0% 6%;
+  --card: 0 0% 4%;
   --card-foreground: 0 0% 95%;
-  --border: 240 3.7% 19%;
-  --input: 240 3.7% 15.9%;
+  --border: 0 0% 19%;
+  --input: 0 0% 10%;
   --primary: 0 0% 95%;
-  --primary-foreground: 0 0% 6%;
-  --secondary: 240 3.7% 15.9%;
+  --primary-foreground: 0 0% 4%;
+  --secondary: 0 0% 10%;
   --secondary-foreground: 0 0% 95%;
-  --accent: 0 0% 100%;
-  --accent-foreground: 0 0% 6%;
+  --accent: 0 0% 10%;
+  --accent-foreground: 0 0% 95%;
   --destructive: 0 70% 50%;
   --destructive-foreground: 0 0% 95%;
-  --ring: 240 3.7% 19%;
+  --ring: 0 0% 19%;
   --radius: 0.5rem;
-  
-  /* LayerZero specific colors */
-  --lz-black: 0 0% 4%;
-  --lz-black-lighter: 0 0% 6%;
-  --lz-text-primary: 0 0% 95%;
-  --lz-text-secondary: 0 0% 46%;
-  --lz-text-tertiary: 0 0% 32%;
-  --lz-line: 0 0% 19%;
-  --lz-code-string: 211 88% 69%;
-  --lz-code-keyword: 270 100% 75%;
-  --lz-code-error: 0 100% 70%;
-  --lz-code-function: 50 85% 58%;
-  --lz-code-comment: 250 14% 57%;
 }
 
 @layer base {
@@ -44,16 +52,67 @@
   }
   
   body {
-    @apply bg-[#0A0A0A] text-[#F2F2F2] font-sans antialiased;
+    @apply bg-black text-[#F2F2F2] font-['Roboto'] antialiased;
+    position: relative;
   }
   
+  body::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+      /* Circles */
+      radial-gradient(circle at 15% 15%, #0A0A0A 0, transparent 70px),
+      radial-gradient(circle at 85% 85%, #0A0A0A 0, transparent 70px),
+      radial-gradient(circle at 75% 25%, #0A0A0A 0, transparent 60px),
+      radial-gradient(circle at 25% 65%, #0A0A0A 0, transparent 50px),
+      /* Lines */
+      repeating-linear-gradient(90deg, #0A0A0A 0, #0A0A0A 1px, transparent 1px, transparent 30px),
+      repeating-linear-gradient(0deg, #0A0A0A 0, #0A0A0A 1px, transparent 1px, transparent 30px);
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 0;
+  }
+  
+  /* Typography styles based on brand guidelines */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-['Roboto'] font-normal tracking-tight;
+  }
+  
+  h1 {
+    @apply text-4xl; /* Large Header */
+  }
+  
+  h2 {
+    @apply text-2xl; /* Medium Header */
+  }
+  
+  h3 {
+    @apply text-xl; /* Small Header */
+  }
+  
+  code, pre {
+    @apply font-['Roboto_Mono'] text-sm;
+  }
+  
+  /* Special classes */
   .uppercase-label {
-    @apply text-xs font-medium uppercase tracking-wider;
+    @apply font-['Roboto_Mono'] text-xs font-medium uppercase tracking-wider text-[#757575];
   }
   
-  .line-pattern {
-    background-image: repeating-linear-gradient(90deg, #323232, #323232 1px, transparent 1px, transparent 20px);
-    opacity: 0.2;
+  .light-text {
+    @apply text-[#F2F2F2];
+  }
+  
+  .secondary-text {
+    @apply text-[#757575];
+  }
+  
+  .tertiary-text {
+    @apply text-[#525252];
   }
   
   /* Network status indicator animation */
@@ -78,11 +137,77 @@
 }
 
 @layer components {
+  /* UI Components */
   .lz-border {
     @apply border border-[#323232];
   }
   
   .lz-card {
-    @apply bg-[#101010] lz-border rounded-xl;
+    @apply bg-[#0A0A0A] lz-border rounded-xl p-6;
+  }
+  
+  .lz-button {
+    @apply px-4 py-2 rounded-lg font-['Roboto_Mono'] uppercase text-xs font-medium tracking-wider 
+           border border-[#323232] bg-transparent hover:border-[#F2F2F2] 
+           transition-colors duration-200;
+  }
+  
+  .lz-button-primary {
+    @apply lz-button bg-[#F2F2F2] text-black hover:bg-[#FFFFFF];
+  }
+  
+  .lz-input {
+    @apply bg-black border border-[#323232] rounded-lg px-4 py-2 
+           text-[#F2F2F2] focus:outline-none focus:border-[#757575]
+           placeholder:text-[#525252];
+  }
+  
+  .lz-select {
+    @apply lz-input appearance-none pr-8;
+  }
+  
+  .lz-select-wrapper {
+    @apply relative;
+  }
+  
+  .lz-select-wrapper::after {
+    content: '';
+    @apply absolute right-3 top-1/2 transform -translate-y-1/2
+           border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent
+           border-t-[#757575] pointer-events-none;
+  }
+  
+  .lz-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  
+  .lz-badge-green {
+    @apply bg-green-900/50 text-green-300;
+  }
+  
+  .lz-badge-yellow {
+    @apply bg-yellow-900/50 text-yellow-300;
+  }
+  
+  .lz-badge-blue {
+    @apply bg-blue-900/50 text-blue-300;
+  }
+  
+  .lz-badge-red {
+    @apply bg-red-900/50 text-red-300;
+  }
+  
+  /* Tab Navigation */
+  .lz-tabs {
+    @apply flex space-x-6 border-b border-[#323232];
+  }
+  
+  .lz-tab {
+    @apply pb-2 font-['Roboto_Mono'] text-sm uppercase text-[#757575] hover:text-[#F2F2F2] 
+           transition-colors border-b-2 border-transparent cursor-pointer;
+  }
+  
+  .lz-tab-active {
+    @apply text-[#F2F2F2] border-[#F2F2F2];
   }
 }

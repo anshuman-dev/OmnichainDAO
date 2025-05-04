@@ -15,15 +15,11 @@ export default function NetworkTabs() {
   
   return (
     <div className="mb-8 overflow-x-auto">
-      <div className="flex space-x-1 border-b border-[#323232]">
+      <div className="lz-tabs">
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            className={`uppercase-label py-3 px-4 ${
-              activeTab === tab.id
-                ? "border-b-2 border-[#F2F2F2] text-[#F2F2F2]"
-                : "text-[#797575] hover:text-[#F2F2F2] transition-all"
-            }`}
+            className={`lz-tab ${activeTab === tab.id ? "lz-tab-active" : ""}`}
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
