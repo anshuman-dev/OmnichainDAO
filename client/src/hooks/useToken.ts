@@ -13,12 +13,12 @@ import { useNetwork } from "@/hooks/useNetwork";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { getProvider, getTokenData, getWalletBalance, sendTokensAcrossChains } from "@/services/ethereum";
+import { estimateCrossChainFee, sendTokensCrossChain, getBalancesAcrossChains } from "@/services/layerzero";
 import { ethers } from "ethers";
 
 export function useToken() {
-  const { isConnected, address, provider } = useWallet();
-  const { currentNetwork } = useNetwork();
+  const { isConnected, address, provider, signer } = useWallet();
+  const { currentNetwork, networks } = useNetwork();
   const { toast } = useToast();
   
   const [tokenStats, setTokenStats] = useState<TokenStats>(DEFAULT_TOKEN_STATS);
@@ -27,6 +27,7 @@ export function useToken() {
   const [supplyChecks, setSupplyChecks] = useState<SupplyCheck[]>(INITIAL_SUPPLY_CHECKS);
   const [contracts, setContracts] = useState<Contracts>(DEFAULT_CONTRACTS);
   const [isLoading, setIsLoading] = useState(false);
+  const [crossChainBalances, setCrossChainBalances] = useState<Record<string, string>>({});
   
   // Fetch token stats and user balance when wallet or network changes
   useEffect(() => {
@@ -34,25 +35,16 @@ export function useToken() {
       if (currentNetwork) {
         setIsLoading(true);
         try {
-          // Get provider based on current network
-          const ethProvider = getProvider(currentNetwork);
-          
-          // Get OFT contract data
-          const oftData = await getTokenData(contracts.oft, ethProvider);
-          
-          // Update token stats with real data
-          setTokenStats({
-            totalSupply: oftData.totalSupply,
-            price: tokenStats.price, // Still using mock price for now
-            volume: tokenStats.volume, // Still using mock volume for now
-            circulatingSupply: oftData.totalSupply // Assuming all tokens are circulating
-          });
-          
-          // If wallet is connected, fetch balance
+          // If wallet is connected, fetch balances across all chains
           if (isConnected && address) {
             try {
-              const balance = await getWalletBalance(contracts.oft, address, ethProvider);
-              const balanceNumber = parseFloat(balance);
+              // Get balances across all chains
+              const balances = await getBalancesAcrossChains(address);
+              setCrossChainBalances(balances);
+              
+              // Set the current network balance
+              const networkBalance = balances[currentNetwork.id] || '0';
+              const balanceNumber = parseFloat(networkBalance);
               const balanceFormatted = balanceNumber.toLocaleString(undefined, { 
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
@@ -69,12 +61,13 @@ export function useToken() {
                 usdValue: usdValue
               });
             } catch (error) {
-              console.error("Error fetching wallet balance:", error);
+              console.error("Error fetching cross-chain balances:", error);
               // Keep existing balance if there's an error
             }
           } else {
             // Reset to default if not connected
             setUserBalance(DEFAULT_USER_BALANCE);
+            setCrossChainBalances({});
           }
         } catch (error) {
           console.error("Error fetching token data:", error);
@@ -90,37 +83,56 @@ export function useToken() {
     };
     
     fetchTokenData();
-  }, [isConnected, address, currentNetwork, contracts.oft, toast, tokenStats.price, tokenStats.volume]);
+  }, [isConnected, address, currentNetwork, toast, tokenStats.price]);
   
-  // Calculate bridge fees
+  // Calculate bridge fees using LayerZero service
   const calculateBridgeFees = useCallback((amount: number, destinationChainId: string): BridgeFees => {
-    // Bridge fee is 0.1% of the amount
-    const bridgeFee = amount * BRIDGE_FEE_PERCENTAGE;
-    
-    // LayerZero fee is a base fee plus a variable amount depending on destination
-    // In a real implementation, this would be fetched from the LayerZero API
-    let layerZeroFee = LAYERZERO_BASE_FEE;
-    
-    // Gas fee depends on the source and destination chains
-    // In a real implementation, this would be estimated based on current gas prices
-    let gasFee = 1.25;
-    
-    if (destinationChainId.includes('arbitrum') || destinationChainId.includes('base')) {
-      gasFee = 0.85; // Lower gas fees for L2s
+    try {
+      // Find the destination network
+      const destinationNetwork = networks.find(network => network.id === destinationChainId);
+      
+      if (!currentNetwork || !destinationNetwork) {
+        throw new Error("Source or destination network not found");
+      }
+      
+      // In a real implementation, we would use the LayerZero API or contract to estimate fees
+      // For now, we'll use simplified logic
+      
+      // Bridge fee is 0.1% of the amount
+      const bridgeFee = amount * BRIDGE_FEE_PERCENTAGE;
+      
+      // LayerZero fee is a base fee plus a variable amount depending on destination
+      let layerZeroFee = LAYERZERO_BASE_FEE;
+      
+      // Gas fee depends on the source and destination chains
+      let gasFee = 1.25;
+      
+      if (destinationChainId.includes('arbitrum') || destinationChainId.includes('base')) {
+        gasFee = 0.85; // Lower gas fees for L2s
+      }
+      
+      // Calculate total cost
+      const totalCost = layerZeroFee + bridgeFee + gasFee;
+      
+      return {
+        layerZeroFee,
+        bridgeFee,
+        gasFee,
+        totalCost
+      };
+    } catch (error) {
+      console.error("Error calculating bridge fees:", error);
+      // Return default values if calculation fails
+      return {
+        layerZeroFee: LAYERZERO_BASE_FEE,
+        bridgeFee: amount * BRIDGE_FEE_PERCENTAGE,
+        gasFee: 1.25,
+        totalCost: LAYERZERO_BASE_FEE + (amount * BRIDGE_FEE_PERCENTAGE) + 1.25
+      };
     }
-    
-    // Calculate total cost
-    const totalCost = layerZeroFee + bridgeFee + gasFee;
-    
-    return {
-      layerZeroFee,
-      bridgeFee,
-      gasFee,
-      totalCost
-    };
-  }, []);
+  }, [currentNetwork, networks]);
   
-  // Bridge tokens to another chain
+  // Bridge tokens to another chain using LayerZero
   const bridgeTokens = useCallback(async (amount: number, destinationChainId: string) => {
     try {
       if (!isConnected) {
@@ -150,7 +162,7 @@ export function useToken() {
         return;
       }
       
-      if (!provider || !address) {
+      if (!provider || !address || !signer) {
         toast({
           title: "Wallet error",
           description: "Your wallet is not properly connected",
@@ -159,15 +171,25 @@ export function useToken() {
         return;
       }
       
+      // Find the destination network
+      const destinationNetwork = networks.find(network => network.id === destinationChainId);
+      
+      if (!destinationNetwork) {
+        toast({
+          title: "Invalid destination",
+          description: "Destination network not found",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       toast({
         title: "Preparing transaction",
-        description: `Preparing to bridge ${amount} OGV from ${currentNetwork.name} to ${destinationChainId}...`,
+        description: `Preparing to bridge ${amount} OGV from ${currentNetwork.name} to ${destinationNetwork.name}...`,
       });
       
-      // Here we would call the appropriate contract method to perform the bridge
-      // This would be a real transaction, requiring gas
-      
-      // For prototype purposes, we'll just simulate the API call
+      // For now, we'll just simulate the bridging process
+      // In a real implementation, this would trigger a blockchain transaction
       setTimeout(() => {
         toast({
           title: "Bridging initialized",
@@ -181,8 +203,24 @@ export function useToken() {
           toChain: destinationChainId,
           walletAddress: address
         });
-      }, 1000);
-      
+        
+        // In a real implementation, we would call the sendTokensCrossChain function:
+        /*
+        const tx = await sendTokensCrossChain(
+          currentNetwork,
+          destinationNetwork,
+          amount.toString(),
+          address,
+          signer
+        );
+        
+        toast({
+          title: "Bridging successful",
+          description: `Successfully bridged ${amount} OGV to ${destinationNetwork.name}. Transaction hash: ${tx.transactionHash}`,
+        });
+        */
+        
+      }, 2000);
     } catch (error: any) {
       console.error("Error bridging tokens:", error);
       toast({
@@ -191,7 +229,7 @@ export function useToken() {
         variant: "destructive",
       });
     }
-  }, [isConnected, currentNetwork, toast, address, provider]);
+  }, [isConnected, currentNetwork, networks, toast, address, provider, signer]);
   
   return {
     tokenStats,
@@ -200,6 +238,7 @@ export function useToken() {
     supplyChecks,
     contracts,
     isLoading,
+    crossChainBalances,
     calculateBridgeFees,
     bridgeTokens
   };

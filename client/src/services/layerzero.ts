@@ -310,7 +310,7 @@ export const requestTestnetTokens = async (
 export const verifySupplyConsistency = async () => {
   try {
     let totalMinted = ethers.parseEther("0");
-    const chainSupplies: Record<string, bigint> = {};
+    const chainSupplies: Record<string, string> = {};
     
     // Get supply on each chain
     const promises = Object.entries(LZ_NETWORKS).map(async ([networkId, networkInfo]) => {
@@ -331,7 +331,8 @@ export const verifySupplyConsistency = async () => {
         
         // Get total supply on this chain
         const supply = await oftContract.totalSupply();
-        chainSupplies[networkId] = supply;
+        const formattedSupply = ethers.formatEther(supply);
+        chainSupplies[networkId] = formattedSupply;
         
         // Add to total
         totalMinted = totalMinted + supply;
@@ -349,12 +350,7 @@ export const verifySupplyConsistency = async () => {
       isConsistent,
       totalMinted: ethers.formatEther(totalMinted),
       expectedTotal: "100,000,000",
-      chainSupplies: Object.fromEntries(
-        Object.entries(chainSupplies).map(([key, value]) => [
-          key, 
-          ethers.formatEther(value)
-        ])
-      )
+      chainSupplies
     };
   } catch (error) {
     console.error("Error verifying supply consistency:", error);

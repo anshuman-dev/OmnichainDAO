@@ -9,12 +9,14 @@ interface TokenActionsProps {
 }
 
 export default function TokenActions({ openWalletModal }: TokenActionsProps) {
-  const { userBalance, bridgeTokens, calculateBridgeFees } = useToken();
+  const { userBalance, bridgeTokens, calculateBridgeFees, isLoading: tokenLoading } = useToken();
   const { networks, currentNetwork, setCurrentNetwork } = useNetwork();
   const { isConnected } = useWallet();
   
   const [amount, setAmount] = useState("");
   const [destinationChain, setDestinationChain] = useState("");
+  const [isBridging, setIsBridging] = useState(false);
+  const [calculatingFees, setCalculatingFees] = useState(false);
   const [fees, setFees] = useState({
     layerZeroFee: 0.15,
     bridgeFee: 0,
@@ -35,8 +37,15 @@ export default function TokenActions({ openWalletModal }: TokenActionsProps) {
   // Update fees when amount or destination chain changes
   useEffect(() => {
     if (amount && destinationChain) {
-      const calculatedFees = calculateBridgeFees(parseFloat(amount), destinationChain);
-      setFees(calculatedFees);
+      setCalculatingFees(true);
+      try {
+        const calculatedFees = calculateBridgeFees(parseFloat(amount), destinationChain);
+        setFees(calculatedFees);
+      } catch (error) {
+        console.error("Error calculating fees:", error);
+      } finally {
+        setCalculatingFees(false);
+      }
     }
   }, [amount, destinationChain, calculateBridgeFees]);
   

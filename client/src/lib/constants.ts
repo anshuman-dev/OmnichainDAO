@@ -77,40 +77,40 @@ export const INITIAL_SUPPLY_CHECKS: SupplyCheck[] = [
 // Available testnet networks
 export const AVAILABLE_NETWORKS: Network[] = [
   {
-    id: "ethereum-goerli",
-    name: "Ethereum Goerli",
+    id: 'ethereum-goerli',
+    name: 'Ethereum Goerli',
     chainId: 5,
-    status: "Online",
-    latency: 65,
-    gasPrice: 3.2,
-    txCount: 0
+    status: 'Online',
+    latency: 26,
+    gasPrice: 3.21,
+    txCount: 7891
   },
   {
-    id: "polygon-mumbai",
-    name: "Polygon Mumbai",
+    id: 'polygon-mumbai',
+    name: 'Polygon Mumbai',
     chainId: 80001,
-    status: "Online",
-    latency: 45,
-    gasPrice: 5.0,
-    txCount: 0
+    status: 'Online',
+    latency: 15,
+    gasPrice: 1.12,
+    txCount: 12034
   },
   {
-    id: "arbitrum-goerli",
-    name: "Arbitrum Goerli",
+    id: 'arbitrum-goerli',
+    name: 'Arbitrum Goerli',
     chainId: 421613,
-    status: "Online",
-    latency: 55,
-    gasPrice: 0.1,
-    txCount: 0
+    status: 'Online',
+    latency: 8,
+    gasPrice: 0.25,
+    txCount: 5421
   },
   {
-    id: "base-goerli",
-    name: "Base Goerli",
+    id: 'base-goerli',
+    name: 'Base Goerli',
     chainId: 84531,
-    status: "Online",
-    latency: 72,
-    gasPrice: 0.05,
-    txCount: 0
+    status: 'Online',
+    latency: 12,
+    gasPrice: 0.1,
+    txCount: 3182
   }
 ];
 

@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { ethers } from "ethers";
 
 interface WalletState {
   isConnected: boolean;
   address: string | null;
   chainId: number | null;
   provider: any;
+  signer: ethers.Signer | null;
 }
 
 export function useWallet() {
@@ -14,7 +16,8 @@ export function useWallet() {
     isConnected: false,
     address: null,
     chainId: null,
-    provider: null
+    provider: null,
+    signer: null
   });
   
   const [isInitialized, setIsInitialized] = useState(false);
@@ -30,11 +33,15 @@ export function useWallet() {
         if (storedAddress && storedChainId) {
           // Check if the wallet is still connected
           if (window.ethereum && window.ethereum.isConnected && window.ethereum.selectedAddress) {
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            
             setWalletState({
               isConnected: true,
               address: storedAddress,
               chainId: parseInt(storedChainId),
-              provider: window.ethereum
+              provider,
+              signer
             });
           }
         }
@@ -60,19 +67,22 @@ export function useWallet() {
           return;
         }
         
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        const ethProvider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await ethProvider.send('eth_requestAccounts', []);
+        const network = await ethProvider.getNetwork();
+        const signer = await ethProvider.getSigner();
         
         if (accounts.length > 0) {
           // Store wallet info
           localStorage.setItem('wallet_address', accounts[0]);
-          localStorage.setItem('wallet_chainId', parseInt(chainId, 16).toString());
+          localStorage.setItem('wallet_chainId', network.chainId.toString());
           
           setWalletState({
             isConnected: true,
             address: accounts[0],
-            chainId: parseInt(chainId, 16),
-            provider: window.ethereum
+            chainId: Number(network.chainId),
+            provider: ethProvider,
+            signer
           });
           
           toast({
@@ -101,6 +111,54 @@ export function useWallet() {
     }
   }, [toast]);
   
+  const switchNetwork = useCallback(async (chainId: number) => {
+    try {
+      if (!window.ethereum) {
+        toast({
+          title: "MetaMask not installed",
+          description: "Please install MetaMask browser extension to continue",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: `0x${chainId.toString(16)}` }],
+      });
+      
+      // Update the chainId in state
+      setWalletState(prev => ({
+        ...prev,
+        chainId
+      }));
+      
+      // Update the stored chainId
+      localStorage.setItem('wallet_chainId', chainId.toString());
+      
+      toast({
+        title: "Network Switched",
+        description: `Switched to chain ID: ${chainId}`,
+      });
+    } catch (error: any) {
+      // This error code indicates that the chain has not been added to MetaMask
+      if (error.code === 4902) {
+        toast({
+          title: "Network Not Found",
+          description: "This network needs to be added to your wallet first",
+          variant: "destructive",
+        });
+      } else {
+        console.error("Error switching network:", error);
+        toast({
+          title: "Network Switch Failed",
+          description: error.message || "Failed to switch network. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [toast]);
+  
   const disconnectWallet = useCallback(() => {
     localStorage.removeItem('wallet_address');
     localStorage.removeItem('wallet_chainId');
@@ -109,7 +167,8 @@ export function useWallet() {
       isConnected: false,
       address: null,
       chainId: null,
-      provider: null
+      provider: null,
+      signer: null
     });
     
     toast({
@@ -122,6 +181,7 @@ export function useWallet() {
     ...walletState,
     isInitialized,
     connectWallet,
-    disconnectWallet
+    disconnectWallet,
+    switchNetwork
   };
 }
