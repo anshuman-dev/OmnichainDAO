@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { ethers } from "ethers";
+import { useRef } from "react";
 
 interface WalletState {
   isConnected: boolean;
@@ -21,6 +22,15 @@ export function useWallet() {
   });
   
   const [isInitialized, setIsInitialized] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  
+  const openWalletModal = useCallback(() => {
+    setShowWalletModal(true);
+  }, []);
+  
+  const closeWalletModal = useCallback(() => {
+    setShowWalletModal(false);
+  }, []);
   
   // Check if wallet is already connected on mount
   useEffect(() => {
@@ -182,6 +192,9 @@ export function useWallet() {
     isInitialized,
     connectWallet,
     disconnectWallet,
-    switchNetwork
+    switchNetwork,
+    openWalletModal,
+    closeWalletModal,
+    showWalletModal
   };
 }

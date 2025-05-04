@@ -4,11 +4,6 @@ import OmniGovernTokenABI from '../contracts/abis/OmniGovernToken.json';
 import type { Network } from '../types/token';
 import { getProvider } from './ethereum';
 
-// Helper function to get contract with signer or provider
-function getContract(address: string, abi: any, signerOrProvider: ethers.Signer | ethers.Provider) {
-  return new ethers.Contract(address, abi, signerOrProvider);
-}
-
 /**
  * Interface for proposal details
  */
@@ -41,7 +36,7 @@ export interface VoteDetails {
  * Get the OmniGovernor contract instance
  */
 export function getGovernorContract(governorAddress: string, signerOrProvider: ethers.Signer | ethers.Provider) {
-  return getContract(governorAddress, OmniGovernorABI, signerOrProvider);
+  return new ethers.Contract(governorAddress, OmniGovernorABI, signerOrProvider);
 }
 
 /**
