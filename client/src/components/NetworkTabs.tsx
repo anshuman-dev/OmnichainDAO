@@ -1,6 +1,4 @@
-import { useState } from "react";
-
-type Tab = "overview" | "token-management" | "bridge" | "governance" | "proposals" | "voting";
+export type Tab = "overview" | "token-management" | "bridge" | "governance" | "proposals" | "voting";
 
 interface NetworkTabsProps {
   activeTab: Tab;

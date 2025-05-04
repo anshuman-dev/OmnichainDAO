@@ -1,16 +1,16 @@
 import { useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import NetworkTabs from "@/components/NetworkTabs";
+import NetworkTabs, { Tab } from "@/components/NetworkTabs";
 import TokenOverview from "@/components/TokenOverview";
 import TokenActions from "@/components/TokenActions";
 import ContractDetails from "@/components/ContractDetails";
 import NetworkStatus from "@/components/NetworkStatus";
 import GovernanceOverview from "@/components/GovernanceOverview";
+import ProposalForm from "@/components/ProposalForm";
+import ProposalVoting from "@/components/ProposalVoting";
 import WalletConnectModal from "@/components/WalletConnectModal";
 import { useWallet } from "@/hooks/useWallet";
-
-type Tab = "overview" | "token-management" | "bridge" | "governance" | "proposals" | "voting";
 
 export default function Home() {
   const { 
@@ -46,6 +46,22 @@ export default function Home() {
         {activeTab === "governance" && (
           <div className="mt-4">
             <GovernanceOverview />
+          </div>
+        )}
+        
+        {activeTab === "proposals" && (
+          <div className="mt-4">
+            <ProposalForm />
+          </div>
+        )}
+        
+        {activeTab === "voting" && (
+          <div className="mt-4">
+            <ProposalVoting 
+              proposalId="1"
+              proposalTitle="Example Proposal"
+              proposalDescription="This is an example proposal description for demonstration purposes."
+            />
           </div>
         )}
         
