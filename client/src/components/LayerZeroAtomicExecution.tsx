@@ -1,301 +1,471 @@
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { useNetwork } from '@/hooks/useNetwork';
-import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/hooks/use-toast';
+import { LucideAlertCircle, LucideArrowRightLeft, LucideCheckCircle, LucideChevronRight, LucideCircleDot, LucideCircleX, LucideClock, LucideCode, LucideCpu, LucideServer, LucideTerminalSquare, LucideZap } from 'lucide-react';
+import { AVAILABLE_NETWORKS } from '@/lib/constants';
+
+// Example proposal actions
+const PROPOSAL_ACTIONS = [
+  {
+    id: 1,
+    name: 'Update Protocol Fee',
+    description: 'Change the protocol fee from 0.1% to 0.5%',
+    chains: ['sepolia', 'optimism-sepolia', 'base-sepolia'],
+    calldata: '0xabcdef1234567890'
+  },
+  {
+    id: 2,
+    name: 'Add Supported Token',
+    description: 'Add USDC as a supported token',
+    chains: ['sepolia', 'arbitrum-sepolia'],
+    calldata: '0x1234567890abcdef'
+  },
+  {
+    id: 3,
+    name: 'Upgrade Contract',
+    description: 'Upgrade the OmniGovernToken implementation',
+    chains: ['sepolia', 'optimism-sepolia', 'arbitrum-sepolia', 'base-sepolia'],
+    calldata: '0x5678901234abcdef'
+  }
+];
 
 export default function LayerZeroAtomicExecution() {
-  const { networks, currentNetwork } = useNetwork();
-  const { isConnected } = useWallet();
+  const { currentNetwork } = useNetwork();
   const { toast } = useToast();
   
+  // State for execution configuration
+  const [selectedProposal, setSelectedProposal] = useState<number | null>(null);
+  const [selectedChains, setSelectedChains] = useState<string[]>([]);
+  const [isSimulating, setIsSimulating] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [executionProgress, setExecutionProgress] = useState(0);
-  const [selectedChains, setSelectedChains] = useState<{[key: string]: boolean}>({
-    'sepolia': true,
-    'amoy': true
-  });
+  const [executionResult, setExecutionResult] = useState<any>(null);
+  const [gasOptimization, setGasOptimization] = useState(true);
+  const [parallelExecution, setParallelExecution] = useState(false);
   
-  // Get networks to execute on
-  const chainsToExecute = networks.filter(network => selectedChains[network.id]);
-  
-  // Handle chain selection
-  const toggleChain = (networkId: string) => {
-    setSelectedChains(prev => ({
-      ...prev,
-      [networkId]: !prev[networkId]
-    }));
+  // Handle proposal selection
+  const handleProposalSelect = (proposalId: number) => {
+    const proposal = PROPOSAL_ACTIONS.find(p => p.id === proposalId);
+    setSelectedProposal(proposalId);
+    // Auto-select all chains for this proposal
+    if (proposal) {
+      setSelectedChains(proposal.chains);
+    }
   };
   
-  // Handle execution
-  const executeWithLzCompose = async () => {
-    if (!isConnected) {
+  // Handle chain selection
+  const handleChainChange = (chainId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedChains([...selectedChains, chainId]);
+    } else {
+      setSelectedChains(selectedChains.filter(id => id !== chainId));
+    }
+  };
+  
+  // Get chain name from ID
+  const getChainName = (chainId: string) => {
+    const network = AVAILABLE_NETWORKS.find(n => n.id === chainId);
+    return network?.name || chainId;
+  };
+  
+  // Simulate execution
+  const simulateExecution = () => {
+    if (!selectedProposal) {
       toast({
-        title: "Wallet not connected",
-        description: "Please connect your wallet to use this feature",
+        title: "No Proposal Selected",
+        description: "Please select a proposal to simulate execution.",
         variant: "destructive",
+        duration: 3000,
       });
       return;
     }
     
-    if (chainsToExecute.length < 2) {
+    if (selectedChains.length === 0) {
       toast({
-        title: "Select multiple chains",
-        description: "Please select at least two chains for atomic execution",
+        title: "No Chains Selected",
+        description: "Please select at least one chain for execution.",
         variant: "destructive",
+        duration: 3000,
+      });
+      return;
+    }
+    
+    setIsSimulating(true);
+    
+    // Simulate API call to get execution preview
+    setTimeout(() => {
+      const proposal = PROPOSAL_ACTIONS.find(p => p.id === selectedProposal);
+      
+      // Generate simulated execution result
+      const simulationResult = {
+        proposalId: selectedProposal,
+        proposalName: proposal?.name,
+        gasEstimation: Math.round(selectedChains.length * 350000),
+        executionTime: selectedChains.length * 30,
+        chains: selectedChains.map(chainId => ({
+          id: chainId,
+          name: getChainName(chainId),
+          gasEstimation: Math.round(Math.random() * 100000 + 250000),
+          status: 'Ready'
+        }))
+      };
+      
+      setExecutionResult(simulationResult);
+      setIsSimulating(false);
+      
+      toast({
+        title: "Simulation Complete",
+        description: "Execution preview generated successfully.",
+        duration: 3000,
+      });
+    }, 2000);
+  };
+  
+  // Execute proposal
+  const executeProposal = () => {
+    if (!selectedProposal || !executionResult) {
+      toast({
+        title: "Simulation Required",
+        description: "Please simulate the execution before proceeding.",
+        variant: "destructive",
+        duration: 3000,
       });
       return;
     }
     
     setIsExecuting(true);
-    setExecutionProgress(0);
     
-    try {
-      // 1. Preparation phase
-      setExecutionProgress(5);
-      await new Promise(resolve => setTimeout(resolve, 500));
+    // Simulate API call to execute proposal
+    setTimeout(() => {
+      // Update execution result with executed status
+      const updatedResult = {
+        ...executionResult,
+        executed: true,
+        executionId: `0x${Math.random().toString(16).substring(2, 34)}`,
+        chains: executionResult.chains.map((chain: any) => ({
+          ...chain,
+          status: 'Executed',
+          txHash: `0x${Math.random().toString(16).substring(2, 34)}`,
+          completedAt: new Date().toISOString()
+        }))
+      };
       
-      toast({
-        title: "Preparing lzCompose Transaction",
-        description: "Generating multi-chain transaction bundle",
-      });
-      
-      // Gradually move to 25%
-      for (let i = 5; i <= 25; i += 5) {
-        setExecutionProgress(i);
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-      
-      // 2. Compose message and send to LayerZero
-      toast({
-        title: "lzCompose Initiated",
-        description: `Sending atomic execution message to ${chainsToExecute.length} chains via LayerZero`,
-      });
-      
-      for (let i = 25; i <= 50; i += 5) {
-        setExecutionProgress(i);
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-      
-      // 3. DVN verification
-      toast({
-        title: "DVN Verification",
-        description: "LayerZero validators are verifying the transaction bundle",
-      });
-      
-      for (let i = 50; i <= 75; i += 5) {
-        setExecutionProgress(i);
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
-      
-      // 4. Execution on destination chains
-      for (let i = 0; i < chainsToExecute.length; i++) {
-        const chain = chainsToExecute[i];
-        toast({
-          title: `Executing on ${chain.name}`,
-          description: "The transaction is being executed atomically",
-        });
-        
-        const progressStep = 25 / chainsToExecute.length;
-        const startProgress = 75 + (i * progressStep);
-        const endProgress = startProgress + progressStep;
-        
-        for (let j = startProgress; j <= endProgress; j += 5) {
-          setExecutionProgress(Math.min(j, 100));
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      }
-      
-      // Complete
-      setExecutionProgress(100);
-      toast({
-        title: "Atomic Execution Complete",
-        description: `All transactions were executed atomically across ${chainsToExecute.length} chains`,
-      });
-      
-      // Keep the execution state visible for a while
-      setTimeout(() => {
-        setIsExecuting(false);
-        setExecutionProgress(0);
-      }, 5000);
-      
-    } catch (error) {
-      console.error("Error during lzCompose execution:", error);
-      toast({
-        title: "Execution Failed",
-        description: "There was an error during atomic execution. All changes were reverted.",
-        variant: "destructive",
-      });
+      setExecutionResult(updatedResult);
       setIsExecuting(false);
-    }
+      
+      toast({
+        title: "Execution Complete",
+        description: "Proposal executed successfully on all chains.",
+        duration: 5000,
+      });
+    }, 3000);
   };
-  
+
   return (
-    <div className="space-y-6">
-      <Card className="w-full bg-gray-900 border border-gray-800">
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle className="text-lg">Atomic Multi-Chain Execution</CardTitle>
-              <CardDescription className="text-gray-400">
-                Execute transactions atomically across multiple chains using lzCompose
-              </CardDescription>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Left Column - Execution Configuration */}
+      <div className="md:col-span-2 space-y-6">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-2">
+              <LucideZap className="w-5 h-5 text-primary" />
+              <CardTitle>lzCompose Atomic Execution</CardTitle>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-            <p className="text-sm text-gray-300">
-              lzCompose is LayerZero's feature for executing transactions atomically across multiple blockchains. 
-              This means that either all transactions succeed on all selected chains, or all fail and revert together. 
-              This demonstration shows how this works in practice.
-            </p>
-          </div>
+            <CardDescription>
+              Execute governance proposal actions atomically across multiple chains using LayerZero's lzCompose.
+            </CardDescription>
+          </CardHeader>
           
-          <div>
-            <h3 className="text-sm font-medium text-gray-200 mb-3">Select Chains for Atomic Execution</h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Select multiple chains to see how lzCompose executes transactions atomically across all of them
-            </p>
-            <div className="space-y-3 bg-gray-800 p-4 rounded-lg">
-              {networks.map(network => (
-                <div className="flex items-center space-x-2" key={network.id}>
-                  <Checkbox 
-                    id={`chain-${network.id}`}
-                    checked={selectedChains[network.id]}
-                    onCheckedChange={() => toggleChain(network.id)}
-                    className="border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                  />
-                  <Label 
-                    htmlFor={`chain-${network.id}`}
-                    className="flex items-center cursor-pointer text-gray-200"
+          <CardContent className="pb-6 space-y-6">
+            {/* Proposal Selection */}
+            <div className="space-y-4">
+              <Label>Select Proposal to Execute</Label>
+              
+              <div className="space-y-3">
+                {PROPOSAL_ACTIONS.map((proposal) => (
+                  <div 
+                    key={proposal.id} 
+                    className={`border p-4 rounded-md cursor-pointer hover:border-primary hover:bg-primary/5 transition-all ${
+                      selectedProposal === proposal.id ? 'border-primary bg-primary/5' : ''
+                    }`}
+                    onClick={() => handleProposalSelect(proposal.id)}
                   >
-                    <span 
-                      className="inline-block w-3 h-3 rounded-full mr-2"
-                      style={{ backgroundColor: network.color || '#888' }}
-                    ></span>
-                    {network.name}
-                    {network.isHub && (
-                      <Badge className="ml-2 text-xs bg-blue-900/50 text-blue-400 hover:bg-blue-900/50">Hub</Badge>
-                    )}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 p-4 rounded-lg border border-blue-900/50">
-            <div className="flex items-start">
-              <div className="flex-shrink-0 w-10 h-10 bg-blue-900/30 rounded-full flex items-center justify-center mr-3 mt-1">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M13 16H12V12H11M12 8H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
-                    stroke="#60A5FA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <div>
-                <h4 className="font-medium text-blue-400">How lzCompose Works</h4>
-                <p className="text-sm text-gray-300 mt-1">
-                  lzCompose bundles multiple transactions targeting different chains into a single atomic unit. 
-                  It leverages LayerZero's cross-chain messaging infrastructure to ensure that either all 
-                  transactions succeed or all fail together, maintaining consistency across the blockchain 
-                  ecosystem.
-                </p>
-                <div className="mt-3 space-y-1">
-                  <div className="flex items-center text-xs text-gray-300">
-                    <div className="w-4 h-4 rounded-full bg-gray-700 text-white flex items-center justify-center mr-1.5 text-[10px]">1</div>
-                    <span>Transactions are bundled into a composition</span>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium">{proposal.name}</h3>
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded">
+                        {proposal.chains.length} Chain{proposal.chains.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      {proposal.description}
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {proposal.chains.map((chainId) => (
+                        <span key={chainId} className="text-xs bg-muted/60 px-1.5 py-0.5 rounded">
+                          {getChainName(chainId)}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex items-center text-xs text-gray-300">
-                    <div className="w-4 h-4 rounded-full bg-gray-700 text-white flex items-center justify-center mr-1.5 text-[10px]">2</div>
-                    <span>LayerZero broadcasts to all target chains simultaneously</span>
-                  </div>
-                  <div className="flex items-center text-xs text-gray-300">
-                    <div className="w-4 h-4 rounded-full bg-gray-700 text-white flex items-center justify-center mr-1.5 text-[10px]">3</div>
-                    <span>DVNs validate all transactions across all chains</span>
-                  </div>
-                  <div className="flex items-center text-xs text-gray-300">
-                    <div className="w-4 h-4 rounded-full bg-gray-700 text-white flex items-center justify-center mr-1.5 text-[10px]">4</div>
-                    <span>All transactions are executed or all are rolled back</span>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
-          </div>
-          
-          {isExecuting && (
-            <div className="space-y-4 bg-gray-800 rounded-lg p-4 border border-gray-700">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-300">Execution Progress</span>
-                  <span className="text-gray-300">{executionProgress}%</span>
+            
+            {/* Chain Selection */}
+            {selectedProposal && (
+              <div className="space-y-4">
+                <Label>Target Chains for Execution</Label>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {PROPOSAL_ACTIONS.find(p => p.id === selectedProposal)?.chains.map((chainId) => (
+                    <div key={chainId} className="flex items-start space-x-3 border p-3 rounded-md">
+                      <Checkbox 
+                        id={`chain-${chainId}`}
+                        checked={selectedChains.includes(chainId)}
+                        onCheckedChange={(checked) => handleChainChange(chainId, checked === true)}
+                        className="mt-1"
+                      />
+                      <div>
+                        <Label 
+                          htmlFor={`chain-${chainId}`}
+                          className="font-medium cursor-pointer"
+                        >
+                          {getChainName(chainId)}
+                        </Label>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <Progress value={executionProgress} className="h-2 bg-gray-700" />
               </div>
+            )}
+            
+            {/* Execution Options */}
+            {selectedProposal && (
+              <div className="space-y-4">
+                <Label>Execution Options</Label>
+                
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border p-3 rounded-md">
+                    <div className="space-y-1">
+                      <Label htmlFor="gas-optimization" className="font-medium cursor-pointer">
+                        Gas Optimization
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Optimize gas usage during cross-chain execution.
+                      </p>
+                    </div>
+                    <Switch 
+                      id="gas-optimization"
+                      checked={gasOptimization}
+                      onCheckedChange={setGasOptimization}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between border p-3 rounded-md">
+                    <div className="space-y-1">
+                      <Label htmlFor="parallel-execution" className="font-medium cursor-pointer">
+                        Parallel Execution
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Execute actions in parallel when possible (may increase gas costs).
+                      </p>
+                    </div>
+                    <Switch 
+                      id="parallel-execution"
+                      checked={parallelExecution}
+                      onCheckedChange={setParallelExecution}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+          
+          <CardFooter className="justify-end space-x-4 pt-2">
+            <Button 
+              variant="outline" 
+              onClick={simulateExecution}
+              disabled={isSimulating || !selectedProposal || selectedChains.length === 0}
+            >
+              {isSimulating ? "Simulating..." : "Simulate Execution"}
+            </Button>
+            <Button 
+              onClick={executeProposal}
+              disabled={isExecuting || !executionResult}
+            >
+              {isExecuting ? "Executing..." : "Execute Proposal"}
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+      
+      {/* Right Column - Execution Status */}
+      <div className="space-y-6">
+        {executionResult ? (
+          <>
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <LucideTerminalSquare className="w-5 h-5 text-primary" />
+                  <CardTitle>Execution Preview</CardTitle>
+                </div>
+                <CardDescription>
+                  Details of the proposed cross-chain execution.
+                </CardDescription>
+              </CardHeader>
               
-              <div className="grid grid-cols-4 text-center text-xs text-gray-400">
-                <div className="space-y-1">
-                  <div className={`h-2 w-2 rounded-full mx-auto ${executionProgress >= 25 ? 'bg-green-500' : executionProgress > 0 ? 'bg-blue-500 animate-pulse' : 'bg-gray-700'}`}></div>
-                  <div>Preparation</div>
+              <CardContent className="space-y-6">
+                {/* Proposal Info */}
+                <div className="space-y-2">
+                  <Label>Proposal</Label>
+                  <div className="text-sm font-medium">{executionResult.proposalName}</div>
                 </div>
-                <div className="space-y-1">
-                  <div className={`h-2 w-2 rounded-full mx-auto ${executionProgress >= 50 ? 'bg-green-500' : executionProgress > 25 ? 'bg-blue-500 animate-pulse' : 'bg-gray-700'}`}></div>
-                  <div>lzCompose</div>
+                
+                {/* Gas Estimation */}
+                <div className="space-y-2">
+                  <Label>Total Gas Estimation</Label>
+                  <div className="text-sm font-medium">
+                    {executionResult.gasEstimation.toLocaleString()} gas units
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <div className={`h-2 w-2 rounded-full mx-auto ${executionProgress >= 75 ? 'bg-green-500' : executionProgress > 50 ? 'bg-blue-500 animate-pulse' : 'bg-gray-700'}`}></div>
-                  <div>Verification</div>
+                
+                {/* Estimated Time */}
+                <div className="space-y-2">
+                  <Label>Estimated Completion Time</Label>
+                  <div className="text-sm font-medium flex items-center gap-1">
+                    <LucideClock className="w-4 h-4" />
+                    <span>~{executionResult.executionTime} seconds</span>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <div className={`h-2 w-2 rounded-full mx-auto ${executionProgress >= 100 ? 'bg-green-500' : executionProgress > 75 ? 'bg-blue-500 animate-pulse' : 'bg-gray-700'}`}></div>
-                  <div>Execution</div>
+                
+                {/* Target Chains */}
+                <div className="space-y-3">
+                  <Label>Target Chains</Label>
+                  
+                  {executionResult.chains.map((chain: any) => (
+                    <div key={chain.id} className="border p-2 rounded-md">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-sm">{chain.name}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          chain.status === 'Executed' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {chain.status}
+                        </span>
+                      </div>
+                      {chain.txHash && (
+                        <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <LucideCheckCircle className="w-3 h-3 text-green-500" />
+                          <span className="truncate">{chain.txHash}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+            
+            {executionResult.executed && (
+              <Card className="bg-green-50 border-green-200">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-2">
+                    <LucideCheckCircle className="w-5 h-5 text-green-500" />
+                    <CardTitle className="text-green-800">Execution Successful</CardTitle>
+                  </div>
+                </CardHeader>
+                
+                <CardContent>
+                  <p className="text-green-800 text-sm">
+                    The proposal was successfully executed on all selected chains atomically.
+                    No further action is required.
+                  </p>
+                  
+                  <div className="mt-4 text-sm space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-green-800">Execution ID:</span>
+                      <span className="font-mono text-green-800">{executionResult.executionId.substring(0, 10)}...</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-green-800">Chains:</span>
+                      <span className="text-green-800">{executionResult.chains.length} chains</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-green-800">Status:</span>
+                      <span className="text-green-800">Complete</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        ) : (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <LucideAlertCircle className="w-5 h-5 text-primary" />
+                <CardTitle>Execution Preview</CardTitle>
+              </div>
+            </CardHeader>
+            
+            <CardContent>
+              <div className="flex flex-col items-center justify-center py-8 space-y-4 text-center">
+                <LucideServer className="w-10 h-10 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">No Simulation Data</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Select a proposal and click "Simulate Execution" to see a preview of the cross-chain execution.
+                  </p>
                 </div>
               </div>
-              
-              <div className="relative mt-4">
-                <div className="absolute inset-0 grid grid-cols-4">
-                  {chainsToExecute.map((chain, index) => {
-                    const position = index / (chainsToExecute.length - 1) * 100;
-                    const isActive = executionProgress > 75 && executionProgress - 75 >= (index / chainsToExecute.length) * 25;
-                    
-                    return (
-                      <div 
-                        key={chain.id}
-                        className={`absolute top-1/2 transform -translate-y-1/2 rounded-full p-1 border ${isActive ? 'border-green-500 compose-pulse' : 'border-gray-700'}`}
-                        style={{ 
-                          left: `${position}%`, 
-                          backgroundColor: chain.color || '#888',
-                          width: '14px',
-                          height: '14px'
-                        }}
-                      ></div>
-                    );
-                  })}
-                  <div className="col-span-4 h-0.5 bg-gray-700 self-center"></div>
-                </div>
-                <div className="h-8"></div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Technical Details */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <LucideCode className="w-5 h-5 text-primary" />
+              <CardTitle>How lzCompose Works</CardTitle>
+            </div>
+          </CardHeader>
+          
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              lzCompose allows atomic cross-chain execution of governance decisions, ensuring that either all actions succeed or all fail together.
+            </p>
+            
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <LucideCircleDot className="w-4 h-4 min-w-[16px] text-primary" />
+                <span>Proposes actions on the hub chain</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <LucideChevronRight className="w-4 h-4 min-w-[16px] ml-4 text-muted-foreground" />
+                <span>LayerZero V2 distributes execution messages to all target chains</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <LucideChevronRight className="w-4 h-4 min-w-[16px] ml-4 text-muted-foreground" />
+                <span>Each chain executes its part of the proposal</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <LucideArrowRightLeft className="w-4 h-4 min-w-[16px] text-primary" />
+                <span>Execution status is reported back to the hub chain</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <LucideCpu className="w-4 h-4 min-w-[16px] text-primary" />
+                <span>If any execution fails, all are reverted</span>
               </div>
             </div>
-          )}
-        </CardContent>
-        <CardFooter className="flex justify-between border-t border-gray-800 pt-6">
-          <div className="text-xs text-gray-400 italic">
-            Note: This is a technology demo. No actual transactions are executed.
-          </div>
-          
-          <Button 
-            onClick={executeWithLzCompose}
-            disabled={isExecuting || chainsToExecute.length < 2}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            {isExecuting ? 'Executing...' : 'Execute with lzCompose'}
-          </Button>
-        </CardFooter>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
