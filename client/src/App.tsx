@@ -32,14 +32,14 @@ function App() {
                 </div>
                 <div className="ml-6 flex space-x-4">
                   <Link href="/">
-                    <a className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    <div className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 cursor-pointer">
                       Home
-                    </a>
+                    </div>
                   </Link>
                   <Link href="/layerzero">
-                    <a className="inline-flex items-center px-1 pt-1 border-b-2 border-primary text-sm font-medium text-primary">
+                    <div className="inline-flex items-center px-1 pt-1 border-b-2 border-primary text-sm font-medium text-primary cursor-pointer">
                       LayerZero Demo
-                    </a>
+                    </div>
                   </Link>
                 </div>
               </div>

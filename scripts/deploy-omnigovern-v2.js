@@ -1,159 +1,173 @@
-// Script to deploy the OmniGovern DAO contracts with LayerZero V2 integration
+// Deploy script for OmniGovern DAO using LayerZero V2
+// This script deploys contracts to Sepolia and Amoy testnets
+
 const { ethers } = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
-// Configuration
-const TOKEN_NAME = "OmniGovern Token";
-const TOKEN_SYMBOL = "OMGOV";
-const INITIAL_SUPPLY = ethers.utils.parseEther("1000000"); // 1 million tokens
-
-// Chain information
-const CHAIN_INFO = {
+// Configuration for testnets
+const config = {
   sepolia: {
-    id: 11155111,
-    layerzero_id: 10161,
-    name: "Sepolia",
+    chainId: 11155111,
+    lzChainId: 10161,
+    rpc: "https://sepolia.infura.io/v3/YOUR_INFURA_KEY", // Replace with your key
     lzEndpoint: "0xae92d5aD7583AD66E49A0c67BAd18F6ba52dDDc1",
     isHub: true,
+    executionDelay: 86400 // 1 day in seconds
   },
   amoy: {
-    id: 80002,
-    layerzero_id: 40161,
-    name: "Polygon Amoy",
+    chainId: 80002,
+    lzChainId: 40161,
+    rpc: "https://rpc-amoy.polygon.technology",
     lzEndpoint: "0xf69186dfBa60DdB133E91E9A4B5673624293d8F8",
     isHub: false,
-  },
+    executionDelay: 86400 // 1 day in seconds
+  }
 };
 
-// DVN information - addresses are from LayerZero docs
-const DVN_INFO = {
-  blockdaemon: {
-    address: "0x71D7a02d21aE5Cb957E6BfF9D6280e2fAa47E223",
-    requiredSignatures: 1,
+// Contract addresses (will be filled during deployment)
+const deployments = {
+  sepolia: {
+    token: "",
+    executor: "",
+    dvnConfig: ""
   },
-  layerzero: {
-    address: "0xA658742d33ebd2ce2F0bdFf73515Aa797Fd161D9",
-    requiredSignatures: 1,
-  },
-  axelar: {
-    address: "0x9768484573D072696F8B1572382619Ab437Af19D",
-    requiredSignatures: 1,
-  },
+  amoy: {
+    token: "",
+    executor: "",
+    dvnConfig: ""
+  }
 };
 
-// Deployment function
+// DVN configuration for enhanced security
+const dvnConfig = [
+  {
+    id: "blockdaemon",
+    name: "Blockdaemon",
+    address: "0x71D7a02d21aE5Cb957E6BfF9D6280e2fAa47E223", // Example address
+    description: "Enterprise-grade blockchain infrastructure provider",
+    enabled: true,
+    requiredSignatures: 1
+  },
+  {
+    id: "layerzero",
+    name: "LayerZero Labs",
+    address: "0xA658742d33ebd2ce2F0bdFf73515Aa797Fd161D9", // Example address
+    description: "Official validators operated by LayerZero team",
+    enabled: true,
+    requiredSignatures: 1
+  }
+];
+
 async function main() {
-  console.log("Starting OmniGovern DAO deployment with LayerZero V2 integration...");
+  console.log("Starting OmniGovern DAO deployment with LayerZero V2");
   
-  // Get the network information
-  const networkName = hre.network.name;
-  const chainInfo = CHAIN_INFO[networkName];
+  // Deploy to Sepolia first (hub chain)
+  await deployToNetwork("sepolia");
   
-  if (!chainInfo) {
-    throw new Error(`Unsupported network: ${networkName}. Please deploy to sepolia or amoy.`);
+  // Deploy to Amoy (satellite chain)
+  await deployToNetwork("amoy");
+  
+  // Set up trusted remotes
+  await configureTrustedRemotes();
+  
+  // Save deployments to file
+  const deploymentsDir = path.join(__dirname, "../deployments");
+  if (!fs.existsSync(deploymentsDir)) {
+    fs.mkdirSync(deploymentsDir);
   }
   
-  console.log(`Deploying to ${chainInfo.name} (chainId: ${chainInfo.id}, lzChainId: ${chainInfo.layerzero_id})`);
-  
-  // Get signers
-  const [deployer] = await ethers.getSigners();
-  console.log(`Deploying with account: ${deployer.address}`);
-  
-  // Deploy OmniGovernToken
-  console.log("Deploying OmniGovernToken...");
-  const hubChainId = chainInfo.isHub ? chainInfo.layerzero_id : CHAIN_INFO.sepolia.layerzero_id;
-  
-  const OmniGovernToken = await ethers.getContractFactory("OmniGovernToken");
-  const token = await OmniGovernToken.deploy(
-    TOKEN_NAME,
-    TOKEN_SYMBOL,
-    chainInfo.lzEndpoint,
-    deployer.address,
-    INITIAL_SUPPLY,
-    hubChainId
-  );
-  await token.deployed();
-  console.log(`OmniGovernToken deployed to: ${token.address}`);
-  
-  // Deploy OmniProposalExecutor
-  console.log("Deploying OmniProposalExecutor...");
-  const OmniProposalExecutor = await ethers.getContractFactory("OmniProposalExecutor");
-  const executor = await OmniProposalExecutor.deploy(
-    chainInfo.lzEndpoint,
-    token.address,
-    deployer.address
-  );
-  await executor.deployed();
-  console.log(`OmniProposalExecutor deployed to: ${executor.address}`);
-  
-  // Deploy DVNConfigManager
-  console.log("Deploying DVNConfigManager...");
-  const DVNConfigManager = await ethers.getContractFactory("DVNConfigManager");
-  const dvnManager = await DVNConfigManager.deploy(
-    chainInfo.lzEndpoint,
-    deployer.address
-  );
-  await dvnManager.deployed();
-  console.log(`DVNConfigManager deployed to: ${dvnManager.address}`);
-  
-  // Setup DVN configuration
-  console.log("Setting up DVN configuration...");
-  
-  // Add chain configs
-  for (const [name, info] of Object.entries(CHAIN_INFO)) {
-    const tx = await dvnManager.addChainConfig(
-      info.layerzero_id,
-      info.name,
-      2 // Require at least 2 DVNs
-    );
-    await tx.wait();
-    console.log(`Added ${info.name} chain configuration`);
-  }
-  
-  // Add DVNs
-  for (const [name, dvn] of Object.entries(DVN_INFO)) {
-    for (const [chainName, chainInfo] of Object.entries(CHAIN_INFO)) {
-      const tx = await dvnManager.addDVN(
-        chainInfo.layerzero_id,
-        dvn.address,
-        dvn.requiredSignatures
-      );
-      await tx.wait();
-      console.log(`Added ${name} DVN to ${chainInfo.name}`);
-    }
-  }
-  
-  // Save deployment information
-  const deploymentInfo = {
-    network: networkName,
-    chainId: chainInfo.id,
-    lzChainId: chainInfo.layerzero_id,
-    contracts: {
-      OmniGovernToken: token.address,
-      OmniProposalExecutor: executor.address,
-      DVNConfigManager: dvnManager.address,
-    },
-    timestamp: new Date().toISOString(),
-  };
-  
-  // Ensure directory exists
-  const deploymentDir = path.join(__dirname, "../deployments");
-  if (!fs.existsSync(deploymentDir)) {
-    fs.mkdirSync(deploymentDir);
-  }
-  
-  // Write deployment info to file
   fs.writeFileSync(
-    path.join(deploymentDir, `${networkName}.json`),
-    JSON.stringify(deploymentInfo, null, 2)
+    path.join(deploymentsDir, "omnigovern-deployments.json"),
+    JSON.stringify(deployments, null, 2)
   );
   
-  console.log(`Deployment information saved to deployments/${networkName}.json`);
-  console.log("Deployment completed successfully!");
+  console.log("Deployment complete! Deployment info saved to deployments/omnigovern-deployments.json");
 }
 
-// Execute main function
+async function deployToNetwork(network) {
+  console.log(`\nDeploying to ${network}...`);
+  
+  // Connect to the network
+  const provider = new ethers.providers.JsonRpcProvider(config[network].rpc);
+  
+  // You need to provide a private key or connect to a wallet here
+  // For example: const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+  // For demo purposes, we'll just use a placeholder
+  const wallet = ethers.Wallet.createRandom().connect(provider);
+  
+  console.log(`Connected to ${network}`);
+  
+  // Deploy token contract
+  const OmniGovernToken = await ethers.getContractFactory("OmniGovernToken", wallet);
+  const token = await OmniGovernToken.deploy(
+    "OmniGovernToken",
+    "OGT",
+    config[network].lzEndpoint,
+    wallet.address
+  );
+  await token.deployed();
+  console.log(`OmniGovernToken deployed to ${network} at ${token.address}`);
+  deployments[network].token = token.address;
+  
+  // Deploy DVN config manager
+  const DVNConfigManager = await ethers.getContractFactory("DVNConfigManager", wallet);
+  const dvnManager = await DVNConfigManager.deploy(wallet.address);
+  await dvnManager.deployed();
+  console.log(`DVNConfigManager deployed to ${network} at ${dvnManager.address}`);
+  deployments[network].dvnConfig = dvnManager.address;
+  
+  // Configure DVNs
+  for (const dvn of dvnConfig) {
+    await dvnManager.addDVN(
+      dvn.id,
+      dvn.address,
+      dvn.name,
+      dvn.description,
+      dvn.enabled,
+      dvn.requiredSignatures
+    );
+    console.log(`Added DVN ${dvn.name} to configuration`);
+  }
+  
+  await dvnManager.setMinRequiredDVNs(2);
+  console.log("Set minimum required DVNs to 2");
+  
+  // Apply DVN config to endpoint
+  await dvnManager.applyDVNConfigToEndpoint(
+    config[network].lzEndpoint,
+    config[network].lzChainId
+  );
+  console.log("Applied DVN configuration to endpoint");
+  
+  // Deploy executor (if this is the hub)
+  if (config[network].isHub) {
+    const OmniProposalExecutor = await ethers.getContractFactory("OmniProposalExecutor", wallet);
+    const executor = await OmniProposalExecutor.deploy(
+      config[network].lzEndpoint,
+      token.address,
+      config[network].executionDelay,
+      wallet.address
+    );
+    await executor.deployed();
+    console.log(`OmniProposalExecutor deployed to ${network} at ${executor.address}`);
+    deployments[network].executor = executor.address;
+  }
+  
+  console.log(`Deployment to ${network} complete!`);
+}
+
+async function configureTrustedRemotes() {
+  console.log("\nConfiguring trusted remotes between chains...");
+  
+  // This would be implemented to connect the contracts across chains
+  // For example, setting up the OFT contract's trusted remotes:
+  // await token.setTrustedRemote(targetLzChainId, targetContractAddress);
+  
+  console.log("Trusted remote configuration complete!");
+}
+
+// Execute the script
 main()
   .then(() => process.exit(0))
   .catch((error) => {

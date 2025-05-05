@@ -1,59 +1,114 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.17;
 
 /**
  * @title IOmniGovernToken
  * @dev Interface for the OmniGovernToken contract
  */
 interface IOmniGovernToken {
+    // Enum for proposal status
+    enum ProposalStatus {
+        Active,
+        Succeeded,
+        Defeated,
+        Executed
+    }
+    
+    // Struct for proposals
+    struct Proposal {
+        address proposer;
+        string title;
+        string description;
+        uint256 startTime;
+        uint256 endTime;
+        uint256 forVotes;
+        uint256 againstVotes;
+        uint256 abstainVotes;
+        ProposalStatus status;
+    }
+    
+    // Struct for votes
+    struct Vote {
+        bool hasVoted;
+        uint8 support; // 0=against, 1=for, 2=abstain
+        uint256 weight;
+    }
+    
+    // OFT V2 has its own MessagingFee struct
+    struct MessagingFee {
+        uint256 nativeFee;
+        uint256 lzTokenFee;
+    }
+    
     /**
-     * @dev Send tokens to another chain
-     * @param dstChainId The destination chain ID
-     * @param to The recipient address
-     * @param amount The amount to send
-     * @param refundAddress The address to refund excess fees to
-     * @param zroPaymentAddress The ZRO payment address (if applicable)
-     * @param adapterParams Additional parameters for the adapter
+     * @dev Creates a new proposal for cross-chain governance
+     * @param _title Title of the proposal
+     * @param _description Detailed description of the proposal
+     * @param _startTime When voting begins
+     * @param _endTime When voting ends
+     * @return proposalId The unique identifier for the proposal
      */
-    function sendTokens(
-        uint16 dstChainId,
-        bytes32 to,
-        uint256 amount,
-        address payable refundAddress,
-        address zroPaymentAddress,
-        bytes calldata adapterParams
+    function createProposal(
+        string memory _title,
+        string memory _description,
+        uint256 _startTime,
+        uint256 _endTime
+    ) external returns (bytes32);
+    
+    /**
+     * @dev Casts a vote on a proposal
+     * @param _proposalId The unique identifier of the proposal
+     * @param _support 0=against, 1=for, 2=abstain
+     */
+    function castVote(bytes32 _proposalId, uint8 _support) external;
+    
+    /**
+     * @dev Sends a cross-chain vote via LayerZero
+     * @param _proposalId The unique identifier of the proposal
+     * @param _support 0=against, 1=for, 2=abstain
+     * @param _dstChainId The destination chain ID (LayerZero chain ID)
+     * @param _msgFee The messaging fee structure
+     * @param _options Additional options for LayerZero
+     */
+    function castCrossChainVote(
+        bytes32 _proposalId,
+        uint8 _support,
+        uint32 _dstChainId,
+        MessagingFee memory _msgFee,
+        bytes memory _options
     ) external payable;
     
     /**
-     * @dev Set trusted remote address for a chain
-     * @param remoteChainId The remote chain ID
-     * @param path The path to the remote contract
+     * @dev Gets the details of a proposal
+     * @param _proposalId The unique identifier of the proposal
+     * @return proposal The proposal details
      */
-    function setTrustedRemote(uint16 remoteChainId, bytes calldata path) external;
+    function getProposal(bytes32 _proposalId) external view returns (Proposal memory);
     
     /**
-     * @dev Cast a vote on a proposal
-     * @param proposalId The ID of the proposal
-     * @param support Whether to support the proposal
+     * @dev Checks whether a voter has voted on a proposal
+     * @param _proposalId The unique identifier of the proposal
+     * @param _voter The address to check
+     * @return hasVoted Whether the address has voted
+     * @return support The vote type (0=against, 1=for, 2=abstain)
+     * @return weight The voting weight
      */
-    function vote(uint256 proposalId, bool support) external;
+    function getVote(bytes32 _proposalId, address _voter) external view returns (
+        bool hasVoted,
+        uint8 support,
+        uint256 weight
+    );
     
     /**
-     * @dev Get the voting power for an account
-     * @param account The account to get voting power for
-     * @return The voting power
+     * @dev Update proposal status based on votes
+     * @param _proposalId The unique identifier of the proposal
      */
-    function getVotingPower(address account) external view returns (uint256);
+    function updateProposalStatus(bytes32 _proposalId) external;
     
     /**
-     * @dev Delegate voting power to another address
-     * @param delegatee The address to delegate to
+     * @dev Get the total voting power from a specific chain
+     * @param _chainId The LayerZero chain ID
+     * @return votingPower The total voting power from that chain
      */
-    function delegateVotingPower(address delegatee) external;
-    
-    /**
-     * @dev Set the hub chain ID
-     * @param hubChainId The new hub chain ID
-     */
-    function setHubChainId(uint16 hubChainId) external;
+    function getChainVotingPower(uint32 _chainId) external view returns (uint256);
 }

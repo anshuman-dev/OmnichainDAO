@@ -1,228 +1,207 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@layerzerolabs/lz-evm-v1-0.7/contracts/interfaces/ILayerZeroEndpoint.sol";
 
 /**
  * @title DVNConfigManager
- * @dev Manages DVN (Data Validation Network) configurations for enhanced
- * security with LayerZero. DVNs provide additional validation of cross-chain messages.
+ * @dev Manages DVN (Data Validation Network) configurations for LayerZero messaging
+ * This contract allows configuration of DVNs for enhanced security of cross-chain messages
  */
 contract DVNConfigManager is Ownable {
-    // LayerZero endpoint
-    ILayerZeroEndpoint public lzEndpoint;
-    
-    // DVN structure
-    struct DVNConfig {
+    // Data structures
+    struct DVNInfo {
         address dvnAddress;
-        uint8 requiredSignatures;
+        string name;
+        string description;
         bool enabled;
+        uint8 requiredSignatures;
     }
     
-    // Chain configuration
-    struct ChainConfig {
-        uint16 chainId;
-        string chainName;
-        DVNConfig[] dvns;
-        uint8 minRequiredDVNs;
-    }
-    
-    // Chain configurations
-    mapping(uint16 => ChainConfig) public chainConfigs;
-    
-    // List of supported chain IDs
-    uint16[] public supportedChainIds;
+    // Storage
+    mapping(string => DVNInfo) private dvns;
+    string[] private dvnIds;
+    uint8 private minRequiredDVNs;
     
     // Events
-    event DVNAdded(uint16 indexed chainId, address indexed dvnAddress, uint8 requiredSignatures);
-    event DVNRemoved(uint16 indexed chainId, address indexed dvnAddress);
-    event DVNUpdated(uint16 indexed chainId, address indexed dvnAddress, uint8 requiredSignatures, bool enabled);
-    event MinRequiredDVNsSet(uint16 indexed chainId, uint8 minRequired);
+    event DVNAdded(string indexed dvnId, address dvnAddress);
+    event DVNUpdated(string indexed dvnId, bool enabled, uint8 requiredSignatures);
+    event MinRequiredDVNsUpdated(uint8 previous, uint8 current);
+    event DVNConfigApplied(address indexed executor, uint32 dstChainId);
     
     /**
-     * @dev Constructor
-     * @param _lzEndpoint The LayerZero endpoint address
-     * @param _owner The contract owner
+     * @dev Constructor initializes the DVN configuration manager
+     * @param _owner The owner of the contract
      */
-    constructor(address _lzEndpoint, address _owner) Ownable(_owner) {
-        require(_lzEndpoint != address(0), "DVNConfigManager: LZ endpoint cannot be zero");
-        lzEndpoint = ILayerZeroEndpoint(_lzEndpoint);
+    constructor(address _owner) {
+        transferOwnership(_owner);
+        minRequiredDVNs = 1; // Default to requiring at least 1 DVN
     }
     
     /**
-     * @dev Add a new chain configuration
-     * @param chainId Chain ID
-     * @param chainName Chain name
-     * @param minRequiredDVNs Minimum required DVNs for the chain
+     * @dev Add a new DVN to the configuration
+     * @param _dvnId Unique identifier for the DVN
+     * @param _dvnAddress The address of the DVN
+     * @param _name Human-readable name for the DVN
+     * @param _description Description of the DVN
+     * @param _enabled Whether the DVN is initially enabled
+     * @param _requiredSignatures Number of signatures required from this DVN
      */
-    function addChainConfig(uint16 chainId, string calldata chainName, uint8 minRequiredDVNs) external onlyOwner {
-        require(minRequiredDVNs > 0, "DVNConfigManager: Min required DVNs must be > 0");
-        require(bytes(chainConfigs[chainId].chainName).length == 0, "DVNConfigManager: Chain already exists");
+    function addDVN(
+        string memory _dvnId,
+        address _dvnAddress,
+        string memory _name,
+        string memory _description,
+        bool _enabled,
+        uint8 _requiredSignatures
+    ) external onlyOwner {
+        require(bytes(_dvnId).length > 0, "DVN: ID cannot be empty");
+        require(_dvnAddress != address(0), "DVN: Address cannot be zero");
+        require(_requiredSignatures > 0, "DVN: Required signatures must be > 0");
+        require(dvns[_dvnId].dvnAddress == address(0), "DVN: ID already exists");
         
-        chainConfigs[chainId] = ChainConfig({
-            chainId: chainId,
-            chainName: chainName,
-            dvns: new DVNConfig[](0),
-            minRequiredDVNs: minRequiredDVNs
+        dvns[_dvnId] = DVNInfo({
+            dvnAddress: _dvnAddress,
+            name: _name,
+            description: _description,
+            enabled: _enabled,
+            requiredSignatures: _requiredSignatures
         });
         
-        supportedChainIds.push(chainId);
+        dvnIds.push(_dvnId);
+        
+        emit DVNAdded(_dvnId, _dvnAddress);
     }
     
     /**
-     * @dev Add a DVN to a chain configuration
-     * @param chainId Chain ID
-     * @param dvnAddress DVN address
-     * @param requiredSignatures Required signatures for the DVN
+     * @dev Update an existing DVN's configuration
+     * @param _dvnId Unique identifier for the DVN
+     * @param _enabled Whether the DVN should be enabled
+     * @param _requiredSignatures Number of signatures required from this DVN
      */
-    function addDVN(uint16 chainId, address dvnAddress, uint8 requiredSignatures) external onlyOwner {
-        require(bytes(chainConfigs[chainId].chainName).length > 0, "DVNConfigManager: Chain not configured");
-        require(dvnAddress != address(0), "DVNConfigManager: DVN address cannot be zero");
-        require(requiredSignatures > 0, "DVNConfigManager: Required signatures must be > 0");
+    function updateDVN(
+        string memory _dvnId,
+        bool _enabled,
+        uint8 _requiredSignatures
+    ) external onlyOwner {
+        require(bytes(_dvnId).length > 0, "DVN: ID cannot be empty");
+        require(dvns[_dvnId].dvnAddress != address(0), "DVN: DVN not found");
+        require(_requiredSignatures > 0, "DVN: Required signatures must be > 0");
         
-        // Check if DVN already exists
-        for (uint256 i = 0; i < chainConfigs[chainId].dvns.length; i++) {
-            require(chainConfigs[chainId].dvns[i].dvnAddress != dvnAddress, "DVNConfigManager: DVN already exists");
-        }
+        DVNInfo storage dvn = dvns[_dvnId];
+        dvn.enabled = _enabled;
+        dvn.requiredSignatures = _requiredSignatures;
         
-        DVNConfig memory dvnConfig = DVNConfig({
-            dvnAddress: dvnAddress,
-            requiredSignatures: requiredSignatures,
-            enabled: true
-        });
-        
-        chainConfigs[chainId].dvns.push(dvnConfig);
-        
-        _updateDVNConfigOnEndpoint(chainId);
-        
-        emit DVNAdded(chainId, dvnAddress, requiredSignatures);
+        emit DVNUpdated(_dvnId, _enabled, _requiredSignatures);
     }
     
     /**
-     * @dev Remove a DVN from a chain configuration
-     * @param chainId Chain ID
-     * @param dvnAddress DVN address
+     * @dev Set the minimum number of required DVNs
+     * @param _minRequired Minimum number of DVNs that must verify messages
      */
-    function removeDVN(uint16 chainId, address dvnAddress) external onlyOwner {
-        require(bytes(chainConfigs[chainId].chainName).length > 0, "DVNConfigManager: Chain not configured");
+    function setMinRequiredDVNs(uint8 _minRequired) external onlyOwner {
+        require(_minRequired > 0, "DVN: Min required must be > 0");
+        require(_minRequired <= dvnIds.length, "DVN: Min required exceeds available DVNs");
         
-        bool found = false;
-        uint256 index;
+        uint8 previous = minRequiredDVNs;
+        minRequiredDVNs = _minRequired;
         
-        for (uint256 i = 0; i < chainConfigs[chainId].dvns.length; i++) {
-            if (chainConfigs[chainId].dvns[i].dvnAddress == dvnAddress) {
-                found = true;
-                index = i;
-                break;
+        emit MinRequiredDVNsUpdated(previous, _minRequired);
+    }
+    
+    /**
+     * @dev Check if current DVN configuration is valid
+     * @return isValid Whether the configuration is valid
+     */
+    function isValidConfig() public view returns (bool) {
+        uint8 enabledCount = 0;
+        
+        for (uint i = 0; i < dvnIds.length; i++) {
+            if (dvns[dvnIds[i]].enabled) {
+                enabledCount++;
             }
         }
         
-        require(found, "DVNConfigManager: DVN not found");
-        
-        // Remove the DVN by swapping with the last element and popping
-        if (index != chainConfigs[chainId].dvns.length - 1) {
-            chainConfigs[chainId].dvns[index] = chainConfigs[chainId].dvns[chainConfigs[chainId].dvns.length - 1];
-        }
-        chainConfigs[chainId].dvns.pop();
-        
-        _updateDVNConfigOnEndpoint(chainId);
-        
-        emit DVNRemoved(chainId, dvnAddress);
+        return enabledCount >= minRequiredDVNs;
     }
     
     /**
-     * @dev Update a DVN configuration
-     * @param chainId Chain ID
-     * @param dvnAddress DVN address
-     * @param requiredSignatures Required signatures for the DVN
-     * @param enabled Whether the DVN is enabled
+     * @dev Get all DVN IDs
+     * @return ids Array of DVN IDs
      */
-    function updateDVN(uint16 chainId, address dvnAddress, uint8 requiredSignatures, bool enabled) external onlyOwner {
-        require(bytes(chainConfigs[chainId].chainName).length > 0, "DVNConfigManager: Chain not configured");
-        require(requiredSignatures > 0, "DVNConfigManager: Required signatures must be > 0");
+    function getAllDVNIds() external view returns (string[] memory) {
+        return dvnIds;
+    }
+    
+    /**
+     * @dev Get information about a specific DVN
+     * @param _dvnId Unique identifier for the DVN
+     * @return dvnInfo The DVN information
+     */
+    function getDVNInfo(string memory _dvnId) external view returns (DVNInfo memory) {
+        return dvns[_dvnId];
+    }
+    
+    /**
+     * @dev Get the minimum required DVNs
+     * @return minRequired Minimum number of DVNs required
+     */
+    function getMinRequiredDVNs() external view returns (uint8) {
+        return minRequiredDVNs;
+    }
+    
+    /**
+     * @dev Build the DVN configuration for LayerZero
+     * @return dvnAddresses Array of DVN addresses
+     * @return requiredSignatures Array of required signatures for each DVN
+     */
+    function buildDVNConfig() 
+        public 
+        view 
+        returns (address[] memory dvnAddresses, uint8[] memory requiredSignatures) 
+    {
+        uint enabledCount = 0;
         
-        bool found = false;
-        
-        for (uint256 i = 0; i < chainConfigs[chainId].dvns.length; i++) {
-            if (chainConfigs[chainId].dvns[i].dvnAddress == dvnAddress) {
-                chainConfigs[chainId].dvns[i].requiredSignatures = requiredSignatures;
-                chainConfigs[chainId].dvns[i].enabled = enabled;
-                found = true;
-                break;
+        // Count enabled DVNs
+        for (uint i = 0; i < dvnIds.length; i++) {
+            if (dvns[dvnIds[i]].enabled) {
+                enabledCount++;
             }
         }
         
-        require(found, "DVNConfigManager: DVN not found");
+        // Initialize arrays with the correct size
+        dvnAddresses = new address[](enabledCount);
+        requiredSignatures = new uint8[](enabledCount);
         
-        _updateDVNConfigOnEndpoint(chainId);
+        // Fill arrays with enabled DVN data
+        uint index = 0;
+        for (uint i = 0; i < dvnIds.length; i++) {
+            DVNInfo memory dvn = dvns[dvnIds[i]];
+            if (dvn.enabled) {
+                dvnAddresses[index] = dvn.dvnAddress;
+                requiredSignatures[index] = dvn.requiredSignatures;
+                index++;
+            }
+        }
         
-        emit DVNUpdated(chainId, dvnAddress, requiredSignatures, enabled);
+        return (dvnAddresses, requiredSignatures);
     }
     
     /**
-     * @dev Set minimum required DVNs for a chain
-     * @param chainId Chain ID
-     * @param minRequired Minimum required DVNs
+     * @dev Apply DVN configuration to a LayerZero endpoint
+     * This is a mock function since actual implementation would depend on the specific
+     * LayerZero endpoint implementation being used
+     * @param _endpoint The LayerZero endpoint address
+     * @param _dstChainId The destination chain ID to configure
      */
-    function setMinRequiredDVNs(uint16 chainId, uint8 minRequired) external onlyOwner {
-        require(bytes(chainConfigs[chainId].chainName).length > 0, "DVNConfigManager: Chain not configured");
-        require(minRequired > 0, "DVNConfigManager: Min required DVNs must be > 0");
+    function applyDVNConfigToEndpoint(address _endpoint, uint32 _dstChainId) external onlyOwner {
+        require(_endpoint != address(0), "DVN: Endpoint cannot be zero");
+        require(isValidConfig(), "DVN: Invalid configuration");
         
-        chainConfigs[chainId].minRequiredDVNs = minRequired;
+        // In a real implementation, this would call the LayerZero endpoint to set the DVN configuration
+        // Example: ILayerZeroEndpoint(_endpoint).setDVNConfig(_dstChainId, dvnAddresses, requiredSignatures);
         
-        _updateDVNConfigOnEndpoint(chainId);
-        
-        emit MinRequiredDVNsSet(chainId, minRequired);
-    }
-    
-    /**
-     * @dev Update DVN configuration on the LayerZero endpoint
-     */
-    function _updateDVNConfigOnEndpoint(uint16 chainId) internal {
-        // In a real-world implementation, we would call the appropriate
-        // functions on the LayerZero endpoint to update the DVN configuration.
-        // This is a simplified version that would need to be adapted to the
-        // specific LayerZero endpoint implementation.
-        
-        // Example (pseudocode):
-        // bytes memory dvnConfig = _encodeDVNConfig(chainId);
-        // lzEndpoint.setConfig(chainId, CONFIG_TYPE_DVN, dvnConfig);
-    }
-    
-    /**
-     * @dev Get DVN configuration for a chain
-     * @param chainId Chain ID
-     * @return The chain configuration
-     */
-    function getChainConfig(uint16 chainId) external view returns (
-        string memory chainName,
-        DVNConfig[] memory dvns,
-        uint8 minRequiredDVNs
-    ) {
-        require(bytes(chainConfigs[chainId].chainName).length > 0, "DVNConfigManager: Chain not configured");
-        
-        return (
-            chainConfigs[chainId].chainName,
-            chainConfigs[chainId].dvns,
-            chainConfigs[chainId].minRequiredDVNs
-        );
-    }
-    
-    /**
-     * @dev Get all supported chain IDs
-     * @return Array of supported chain IDs
-     */
-    function getSupportedChainIds() external view returns (uint16[] memory) {
-        return supportedChainIds;
-    }
-    
-    /**
-     * @dev Get the number of DVNs for a chain
-     * @param chainId Chain ID
-     * @return The number of DVNs
-     */
-    function getDVNCount(uint16 chainId) external view returns (uint256) {
-        return chainConfigs[chainId].dvns.length;
+        // For this simplified implementation, we just emit an event
+        emit DVNConfigApplied(msg.sender, _dstChainId);
     }
 }
