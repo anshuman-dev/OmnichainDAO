@@ -8,7 +8,11 @@ import ContractDetails from "@/components/ContractDetails";
 import NetworkStatus from "@/components/NetworkStatus";
 import GovernanceOverview from "@/components/GovernanceOverview";
 import ProposalForm from "@/components/ProposalForm";
+import CrossChainProposal from "@/components/CrossChainProposal";
 import ProposalVoting from "@/components/ProposalVoting";
+import CrossChainVoting from "@/components/CrossChainVoting";
+import VoteAggregation from "@/components/VoteAggregation";
+import ExecutionLayer from "@/components/ExecutionLayer";
 import WalletConnectModal from "@/components/WalletConnectModal";
 import { useWallet } from "@/hooks/useWallet";
 
@@ -44,23 +48,27 @@ export default function Home() {
         )}
         
         {activeTab === "governance" && (
-          <div className="mt-4">
+          <div className="mt-4 space-y-6">
             <GovernanceOverview />
+            <VoteAggregation />
+            <ExecutionLayer proposalId="1" proposalTitle="Protocol Fee Adjustment" />
           </div>
         )}
         
         {activeTab === "proposals" && (
-          <div className="mt-4">
+          <div className="mt-4 space-y-6">
+            <CrossChainProposal />
             <ProposalForm />
           </div>
         )}
         
         {activeTab === "voting" && (
-          <div className="mt-4">
+          <div className="mt-4 space-y-6">
+            <CrossChainVoting />
             <ProposalVoting 
               proposalId="1"
-              proposalTitle="Example Proposal"
-              proposalDescription="This is an example proposal description for demonstration purposes."
+              proposalTitle="Protocol Fee Adjustment"
+              proposalDescription="Adjust the protocol fee from 0.1% to 0.05% to remain competitive with other cross-chain solutions."
             />
           </div>
         )}
