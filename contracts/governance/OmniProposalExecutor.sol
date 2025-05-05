@@ -1,285 +1,267 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
+import "@layerzerolabs/lz-evm-sdk-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import "@layerzerolabs/lz-evm-sdk-v2/contracts/lzApp/MessagingComposer.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@layerzerolabs/lz-evm-sdk-v2/contracts/MessagingBase.sol";
-import "@layerzerolabs/lz-evm-sdk-v2/contracts/interfaces/IMessagingComposer.sol";
-import "../interfaces/IOmniGovernToken.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
  * @title OmniProposalExecutor
- * @dev Executes successful governance proposals across multiple chains using lzCompose
- * This contract coordinates atomic execution of proposals on all connected chains
+ * @dev Handles atomic execution of governance proposals across multiple chains using lzCompose
  */
-contract OmniProposalExecutor is Ownable, MessagingBase {
-    enum ExecutionStatus {
-        Pending,
-        Queued,
-        Executed,
-        Failed,
-        Cancelled
+contract OmniProposalExecutor is Ownable, MessagingComposer {
+    using Counters for Counters.Counter;
+    
+    ILayerZeroEndpointV2 public endpoint;
+    
+    // Track proposals
+    Counters.Counter private proposalIds;
+    
+    // Proposal status
+    enum ProposalStatus { Pending, Succeeded, Failed, Executed }
+    
+    // Proposal structure
+    struct Proposal {
+        uint256 id;
+        string title;
+        string description;
+        address proposer;
+        bytes[] calldatas;
+        address[] targets;
+        uint256 executionTime;
+        ProposalStatus status;
+        mapping(uint32 => bool) executedOnChain; // Track execution per chain
     }
     
-    struct ExecutionRecord {
-        bytes32 proposalId;
-        uint256 queuedAt;
-        ExecutionStatus status;
-        bytes[] calls;
-        uint32[] targetChainIds;
-        bool isAtomic;
+    // Map proposal IDs to Proposal structs
+    mapping(uint256 => Proposal) public proposals;
+    
+    // Chain configuration
+    struct ChainConfig {
+        uint32 eid;
+        string name;
+        address executor; // Remote executor address on that chain
+        bool isActive;
     }
     
-    // Storage
-    mapping(bytes32 => ExecutionRecord) private executions;
-    address public govToken;
-    uint256 public executionDelay;
+    // Map of chain ID to ChainConfig
+    mapping(uint32 => ChainConfig) public chainConfigs;
+    
+    // Array to track all configured chains
+    uint32[] public configuredChains;
     
     // Events
-    event ProposalExecutionQueued(bytes32 indexed proposalId, uint256 executeAfter);
-    event ProposalExecutionStarted(bytes32 indexed proposalId, bool isAtomic);
-    event ProposalExecutionComplete(bytes32 indexed proposalId, bool success);
-    event CrossChainExecutionSent(bytes32 indexed proposalId, uint32 dstChainId);
-    event CrossChainExecutionReceived(bytes32 indexed proposalId, uint32 srcChainId);
+    event ProposalCreated(uint256 proposalId, address proposer, string title);
+    event ProposalExecuted(uint256 proposalId, uint32[] chains);
+    event ChainConfigured(uint32 eid, string name, address executor);
+    event ExecutionRequested(uint256 proposalId, uint32 chainId);
+    event ExecutionCompleted(uint256 proposalId, uint32 chainId, bool success);
     
     /**
-     * @dev Constructor initializes the proposal executor
-     * @param _endpoint LayerZero endpoint address
-     * @param _govToken Address of the governance token contract
-     * @param _executionDelay Delay before execution after queuing (in seconds)
-     * @param _owner Owner of the contract
+     * @dev Constructor
+     * @param _endpoint The LayerZero endpoint
+     * @param _owner The owner of the contract
      */
-    constructor(
-        address _endpoint,
-        address _govToken,
-        uint256 _executionDelay,
-        address _owner
-    ) MessagingBase(_endpoint) {
-        require(_govToken != address(0), "OPE: Gov token cannot be zero");
-        govToken = _govToken;
-        executionDelay = _executionDelay;
-        transferOwnership(_owner);
+    constructor(address _endpoint, address _owner) Ownable() {
+        endpoint = ILayerZeroEndpointV2(_endpoint);
+        _transferOwnership(_owner);
     }
     
     /**
-     * @dev Queue a proposal for execution
-     * @param _proposalId The unique identifier of the proposal
-     * @param _calls Array of encoded function calls to execute
-     * @param _targetChainIds Array of target chain IDs (LayerZero IDs)
-     * @param _isAtomic Whether execution should be atomic
+     * @dev Configure a chain for cross-chain execution
+     * @param _eid The chain endpoint ID
+     * @param _name Chain name (for readability)
+     * @param _executor The executor contract address on the remote chain
      */
-    function queueExecution(
-        bytes32 _proposalId,
-        bytes[] memory _calls,
-        uint32[] memory _targetChainIds,
-        bool _isAtomic
-    ) external {
-        // Check if the proposal has succeeded
-        IOmniGovernToken.Proposal memory proposal = IOmniGovernToken(govToken).getProposal(_proposalId);
-        require(proposal.status == IOmniGovernToken.ProposalStatus.Succeeded, "OPE: Proposal not successful");
+    function configureChain(
+        uint32 _eid,
+        string memory _name,
+        address _executor
+    ) external onlyOwner {
+        require(_executor != address(0), "Executor address cannot be zero");
         
-        // Ensure calls and targetChainIds match
-        require(_calls.length == _targetChainIds.length, "OPE: Calls and targets mismatch");
-        require(_calls.length > 0, "OPE: No calls provided");
+        // If this is a new chain, add it to the array
+        if (!chainConfigs[_eid].isActive) {
+            configuredChains.push(_eid);
+        }
         
-        // Ensure this proposal hasn't been queued before
-        require(executions[_proposalId].status == ExecutionStatus.Pending, "OPE: Already queued");
-        
-        // Create execution record
-        executions[_proposalId] = ExecutionRecord({
-            proposalId: _proposalId,
-            queuedAt: block.timestamp,
-            status: ExecutionStatus.Queued,
-            calls: _calls,
-            targetChainIds: _targetChainIds,
-            isAtomic: _isAtomic
+        // Update the chain configuration
+        chainConfigs[_eid] = ChainConfig({
+            eid: _eid,
+            name: _name,
+            executor: _executor,
+            isActive: true
         });
         
-        // Emit event with execution time
-        emit ProposalExecutionQueued(_proposalId, block.timestamp + executionDelay);
+        emit ChainConfigured(_eid, _name, _executor);
     }
     
     /**
-     * @dev Execute a queued proposal
-     * @param _proposalId The unique identifier of the proposal
+     * @dev Create a new proposal
+     * @param _title The proposal title
+     * @param _description The proposal description
+     * @param _targets The target addresses for each transaction
+     * @param _calldatas The call data for each transaction
      */
-    function execute(bytes32 _proposalId) external payable {
-        ExecutionRecord storage execution = executions[_proposalId];
+    function createProposal(
+        string memory _title,
+        string memory _description,
+        address[] memory _targets,
+        bytes[] memory _calldatas
+    ) external returns (uint256) {
+        require(_targets.length == _calldatas.length, "Target and calldata count mismatch");
+        require(_targets.length > 0, "No targets specified");
         
-        // Verify execution is ready
-        require(execution.status == ExecutionStatus.Queued, "OPE: Not in queued state");
-        require(block.timestamp >= execution.queuedAt + executionDelay, "OPE: Execution delay not met");
+        // Increment proposal ID
+        proposalIds.increment();
+        uint256 proposalId = proposalIds.current();
         
-        // Update status to executing
-        execution.status = ExecutionStatus.Executed;
+        // Create new proposal
+        Proposal storage newProposal = proposals[proposalId];
+        newProposal.id = proposalId;
+        newProposal.title = _title;
+        newProposal.description = _description;
+        newProposal.proposer = msg.sender;
+        newProposal.targets = _targets;
+        newProposal.calldatas = _calldatas;
+        newProposal.status = ProposalStatus.Pending;
         
-        emit ProposalExecutionStarted(_proposalId, execution.isAtomic);
+        emit ProposalCreated(proposalId, msg.sender, _title);
         
-        // If atomic, use lzCompose, otherwise execute directly
-        if (execution.isAtomic) {
-            _executeWithLzCompose(_proposalId);
-        } else {
-            _executeDirectly(_proposalId);
-        }
-        
-        // Execution complete
-        emit ProposalExecutionComplete(_proposalId, true);
+        return proposalId;
     }
     
     /**
-     * @dev Cancel a queued execution
-     * @param _proposalId The unique identifier of the proposal
+     * @dev Execute a proposal atomically across all chains using lzCompose
+     * @param _proposalId The ID of the proposal to execute
+     * @param _options Configuration options for LayerZero
      */
-    function cancelExecution(bytes32 _proposalId) external onlyOwner {
-        ExecutionRecord storage execution = executions[_proposalId];
-        require(execution.status == ExecutionStatus.Queued, "OPE: Not in queued state");
+    function executeProposal(
+        uint256 _proposalId,
+        bytes calldata _options
+    ) external payable {
+        Proposal storage proposal = proposals[_proposalId];
         
-        execution.status = ExecutionStatus.Cancelled;
-    }
-    
-    /**
-     * @dev Get the status of an execution
-     * @param _proposalId The unique identifier of the proposal
-     * @return status The current execution status
-     */
-    function getExecutionStatus(bytes32 _proposalId) external view returns (ExecutionStatus) {
-        return executions[_proposalId].status;
-    }
-    
-    /**
-     * @dev Get full execution details
-     * @param _proposalId The unique identifier of the proposal
-     * @return execution The execution record
-     */
-    function getExecution(bytes32 _proposalId) external view returns (ExecutionRecord memory) {
-        return executions[_proposalId];
-    }
-    
-    /**
-     * @dev Internal function to execute proposal directly (non-atomic)
-     * @param _proposalId The unique identifier of the proposal
-     */
-    function _executeDirectly(bytes32 _proposalId) internal {
-        ExecutionRecord storage execution = executions[_proposalId];
+        require(proposal.id == _proposalId, "Proposal does not exist");
+        require(proposal.status == ProposalStatus.Pending, "Proposal cannot be executed");
         
-        for (uint i = 0; i < execution.targetChainIds.length; i++) {
-            uint32 dstChainId = execution.targetChainIds[i];
-            bytes memory call = execution.calls[i];
+        // Set execution timestamp
+        proposal.executionTime = block.timestamp;
+        
+        // Mark proposal as in progress
+        proposal.status = ProposalStatus.Succeeded;
+        
+        // Prepare for lzCompose
+        uint32[] memory chains = new uint32[](configuredChains.length);
+        address[] memory remoteDsts = new address[](configuredChains.length);
+        bytes[] memory messages = new bytes[](configuredChains.length);
+        
+        // Build messages for each chain
+        for (uint256 i = 0; i < configuredChains.length; i++) {
+            uint32 chainId = configuredChains[i];
             
-            // If the target chain is this chain, execute locally
-            if (dstChainId == lzChainId) {
-                // Execute local call
-                // This is simplified - in a real implementation, we'd decode and call the target
-                emit CrossChainExecutionReceived(_proposalId, lzChainId);
-            } else {
-                // Send to remote chain
-                _sendCrossChainExecution(_proposalId, dstChainId, call);
-                emit CrossChainExecutionSent(_proposalId, dstChainId);
+            if (chainConfigs[chainId].isActive) {
+                chains[i] = chainId;
+                remoteDsts[i] = chainConfigs[chainId].executor;
+                
+                // Build message with proposal data
+                messages[i] = abi.encode(
+                    _proposalId,
+                    proposal.targets,
+                    proposal.calldatas
+                );
+                
+                emit ExecutionRequested(_proposalId, chainId);
             }
         }
+        
+        // Create the composed message
+        MessagingParams[] memory msgParams = _createMessagingParams(chains, remoteDsts, messages);
+        
+        // Pay for the message
+        endpoint.send{value: msg.value}(msgParams, _options, payable(msg.sender));
+        
+        // Note which chains this was executed on
+        emit ProposalExecuted(_proposalId, chains);
     }
     
     /**
-     * @dev Internal function to execute proposal with lzCompose (atomic)
-     * @param _proposalId The unique identifier of the proposal
+     * @dev Handle incoming cross-chain execution message
+     * @param _origin The origin of the message
+     * @param _guid The message GUID
+     * @param _message The encoded message
+     * @param _executor The executor of the message
+     * @param _extraData Any extra data
      */
-    function _executeWithLzCompose(bytes32 _proposalId) internal {
-        ExecutionRecord storage execution = executions[_proposalId];
-        
-        // Prepare arrays for lzCompose
-        uint32[] memory dstChainIds = new uint32[](execution.targetChainIds.length);
-        bytes[] memory messages = new bytes[](execution.targetChainIds.length);
-        
-        for (uint i = 0; i < execution.targetChainIds.length; i++) {
-            dstChainIds[i] = execution.targetChainIds[i];
-            
-            // Prepare message (includes proposalId and call data)
-            messages[i] = abi.encode(
-                _proposalId,
-                execution.calls[i]
-            );
-        }
-        
-        // Use lzCompose to send all messages atomically
-        address composer = quoter.getComposer(msg.sender);
-        require(composer != address(0), "OPE: Composer not found");
-        
-        // Get the fee for the composed message
-        try IMessagingComposer(composer).quoteMessagesGas(
-            dstChainIds,
-            messages,
-            bytes("")
-        ) returns (MessagingFee memory fee) {
-            // Ensure enough ETH was provided
-            require(msg.value >= fee.nativeFee, "OPE: Insufficient fee for lzCompose");
-            
-            // Send composed message
-            IMessagingComposer(composer).sendComposedMessages{value: fee.nativeFee}(
-                dstChainIds,
-                messages,
-                payable(msg.sender), // Refund address
-                bytes("")            // Options
-            );
-            
-            // Emit events for each destination
-            for (uint i = 0; i < dstChainIds.length; i++) {
-                emit CrossChainExecutionSent(_proposalId, dstChainIds[i]);
-            }
-        } catch {
-            execution.status = ExecutionStatus.Failed;
-            revert("OPE: lzCompose failed");
-        }
-    }
-    
-    /**
-     * @dev Send an execution message to a remote chain
-     * @param _proposalId The unique identifier of the proposal
-     * @param _dstChainId The destination chain ID
-     * @param _callData The encoded call data
-     */
-    function _sendCrossChainExecution(
-        bytes32 _proposalId,
-        uint32 _dstChainId,
-        bytes memory _callData
-    ) internal {
-        bytes memory payload = abi.encode(
-            _proposalId,
-            _callData
-        );
-        
-        try this.quoteFee(_dstChainId, payload, bytes("")) returns (MessagingFee memory fee) {
-            require(msg.value >= fee.nativeFee, "OPE: Insufficient fee");
-            
-            // Send message
-            _lzSend(
-                _dstChainId,
-                payload,
-                fee,
-                payload, // Options
-                msg.value
-            );
-        } catch {
-            executions[_proposalId].status = ExecutionStatus.Failed;
-            revert("OPE: Cross-chain send failed");
-        }
-    }
-    
-    /**
-     * @dev Process received cross-chain execution message
-     */
-    function _lzReceive(
-        Origin memory _origin,
+    function lzReceive(
+        Origin calldata _origin,
         bytes32 _guid,
-        bytes memory _message,
+        bytes calldata _message,
         address _executor,
-        bytes memory _extraData
-    ) internal override {
-        // Decode the message
-        (
-            bytes32 proposalId,
-            bytes memory callData
-        ) = abi.decode(_message, (bytes32, bytes));
+        bytes calldata _extraData
+    ) external {
+        require(msg.sender == address(endpoint), "Invalid sender");
         
-        // Execute the call (simplified - in a real implementation we'd decode and call the target)
-        emit CrossChainExecutionReceived(proposalId, _origin.srcChainId);
+        // Decode message
+        (
+            uint256 proposalId,
+            address[] memory targets,
+            bytes[] memory calldatas
+        ) = abi.decode(_message, (uint256, address[], bytes[]));
+        
+        // Execute each transaction
+        bool allSuccess = true;
+        for (uint256 i = 0; i < targets.length; i++) {
+            (bool success, ) = targets[i].call(calldatas[i]);
+            if (!success) {
+                allSuccess = false;
+                break;
+            }
+        }
+        
+        // Mark the chain as executed
+        Proposal storage proposal = proposals[proposalId];
+        proposal.executedOnChain[_origin.srcEid] = true;
+        
+        emit ExecutionCompleted(proposalId, _origin.srcEid, allSuccess);
+    }
+    
+    /**
+     * @dev Check if proposal has been executed on a specific chain
+     * @param _proposalId The proposal ID
+     * @param _chainId The chain ID
+     * @return Whether the proposal has been executed on the chain
+     */
+    function isExecutedOnChain(uint256 _proposalId, uint32 _chainId) external view returns (bool) {
+        return proposals[_proposalId].executedOnChain[_chainId];
+    }
+    
+    /**
+     * @dev Get proposal details
+     * @param _proposalId The proposal ID
+     * @return title The proposal title
+     * @return description The proposal description
+     * @return proposer The proposer address
+     * @return status The proposal status
+     * @return executionTime The execution timestamp
+     */
+    function getProposalDetails(uint256 _proposalId) external view returns (
+        string memory title,
+        string memory description,
+        address proposer,
+        ProposalStatus status,
+        uint256 executionTime
+    ) {
+        Proposal storage proposal = proposals[_proposalId];
+        require(proposal.id == _proposalId, "Proposal does not exist");
+        
+        return (
+            proposal.title,
+            proposal.description,
+            proposal.proposer,
+            proposal.status,
+            proposal.executionTime
+        );
     }
 }

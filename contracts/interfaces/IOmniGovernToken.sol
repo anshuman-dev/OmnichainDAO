@@ -1,114 +1,83 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
+
 /**
  * @title IOmniGovernToken
  * @dev Interface for the OmniGovernToken contract
  */
-interface IOmniGovernToken {
-    // Enum for proposal status
-    enum ProposalStatus {
-        Active,
-        Succeeded,
-        Defeated,
-        Executed
-    }
-    
-    // Struct for proposals
-    struct Proposal {
-        address proposer;
-        string title;
-        string description;
-        uint256 startTime;
-        uint256 endTime;
-        uint256 forVotes;
-        uint256 againstVotes;
-        uint256 abstainVotes;
-        ProposalStatus status;
-    }
-    
-    // Struct for votes
-    struct Vote {
-        bool hasVoted;
-        uint8 support; // 0=against, 1=for, 2=abstain
-        uint256 weight;
-    }
-    
-    // OFT V2 has its own MessagingFee struct
-    struct MessagingFee {
-        uint256 nativeFee;
-        uint256 lzTokenFee;
-    }
+interface IOmniGovernToken is IERC20Metadata, IERC20Permit {
+    /**
+     * @dev Burns tokens on the specified chain
+     * @param account The account to burn from
+     * @param amount The amount to burn
+     */
+    function burn(address account, uint256 amount) external;
     
     /**
-     * @dev Creates a new proposal for cross-chain governance
-     * @param _title Title of the proposal
-     * @param _description Detailed description of the proposal
-     * @param _startTime When voting begins
-     * @param _endTime When voting ends
-     * @return proposalId The unique identifier for the proposal
+     * @dev Mints tokens to the specified account
+     * @param account The account to mint to
+     * @param amount The amount to mint
      */
-    function createProposal(
-        string memory _title,
-        string memory _description,
-        uint256 _startTime,
-        uint256 _endTime
-    ) external returns (bytes32);
+    function mint(address account, uint256 amount) external;
     
     /**
-     * @dev Casts a vote on a proposal
-     * @param _proposalId The unique identifier of the proposal
-     * @param _support 0=against, 1=for, 2=abstain
+     * @dev Cross-chain vote delegation
+     * @param dstEid The destination endpoint ID
+     * @param delegatee The address to delegate to
+     * @param options The LayerZero options
      */
-    function castVote(bytes32 _proposalId, uint8 _support) external;
-    
-    /**
-     * @dev Sends a cross-chain vote via LayerZero
-     * @param _proposalId The unique identifier of the proposal
-     * @param _support 0=against, 1=for, 2=abstain
-     * @param _dstChainId The destination chain ID (LayerZero chain ID)
-     * @param _msgFee The messaging fee structure
-     * @param _options Additional options for LayerZero
-     */
-    function castCrossChainVote(
-        bytes32 _proposalId,
-        uint8 _support,
-        uint32 _dstChainId,
-        MessagingFee memory _msgFee,
-        bytes memory _options
+    function crossChainDelegate(
+        uint32 dstEid,
+        address delegatee,
+        bytes calldata options
     ) external payable;
     
     /**
-     * @dev Gets the details of a proposal
-     * @param _proposalId The unique identifier of the proposal
-     * @return proposal The proposal details
+     * @dev Returns the delegation power of an account
+     * @param account The account to get the delegation power of
+     * @return The delegation power of the account
      */
-    function getProposal(bytes32 _proposalId) external view returns (Proposal memory);
+    function getVotes(address account) external view returns (uint256);
     
     /**
-     * @dev Checks whether a voter has voted on a proposal
-     * @param _proposalId The unique identifier of the proposal
-     * @param _voter The address to check
-     * @return hasVoted Whether the address has voted
-     * @return support The vote type (0=against, 1=for, 2=abstain)
-     * @return weight The voting weight
+     * @dev Returns the delegation power of an account at a certain block
+     * @param account The account to get the delegation power of
+     * @param blockNumber The block number to get the delegation power at
+     * @return The delegation power of the account at the block
      */
-    function getVote(bytes32 _proposalId, address _voter) external view returns (
-        bool hasVoted,
-        uint8 support,
-        uint256 weight
-    );
+    function getPastVotes(address account, uint256 blockNumber) external view returns (uint256);
     
     /**
-     * @dev Update proposal status based on votes
-     * @param _proposalId The unique identifier of the proposal
+     * @dev Returns the current delegation power of a delegatee
+     * @param delegatee The delegatee to get the delegation power of
+     * @return The delegation power of the delegatee
      */
-    function updateProposalStatus(bytes32 _proposalId) external;
+    function delegates(address delegatee) external view returns (address);
     
     /**
-     * @dev Get the total voting power from a specific chain
-     * @param _chainId The LayerZero chain ID
-     * @return votingPower The total voting power from that chain
+     * @dev Delegates voting power to an address
+     * @param delegatee The address to delegate to
      */
-    function getChainVotingPower(uint32 _chainId) external view returns (uint256);
+    function delegate(address delegatee) external;
+    
+    /**
+     * @dev Delegates voting power to an address with a signature
+     * @param delegatee The address to delegate to
+     * @param nonce The nonce for the signature
+     * @param expiry The expiry for the signature
+     * @param v The v component of the signature
+     * @param r The r component of the signature
+     * @param s The s component of the signature
+     */
+    function delegateBySig(
+        address delegatee,
+        uint256 nonce,
+        uint256 expiry,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
 }

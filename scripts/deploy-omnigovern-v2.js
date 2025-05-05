@@ -1,173 +1,229 @@
-// Deploy script for OmniGovern DAO using LayerZero V2
-// This script deploys contracts to Sepolia and Amoy testnets
-
-const { ethers } = require("hardhat");
+// Deployment script for OmniGovern on LayerZero V2
+const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
-// Configuration for testnets
-const config = {
-  sepolia: {
-    chainId: 11155111,
-    lzChainId: 10161,
-    rpc: "https://sepolia.infura.io/v3/YOUR_INFURA_KEY", // Replace with your key
-    lzEndpoint: "0xae92d5aD7583AD66E49A0c67BAd18F6ba52dDDc1",
+// LayerZero V2 Endpoint addresses
+const ENDPOINTS = {
+  // Testnet endpoints
+  sepolia: "0x6EDCE65403992e310A62460808c4b910D972f10f",
+  amoy: "0x6EDCE65403992e310A62460808c4b910D972f10f",
+  
+  // Add mainnet endpoints when ready
+};
+
+// Chain IDs for LayerZero V2
+const CHAIN_IDS = {
+  sepolia: 40161,
+  amoy: 40231,
+};
+
+// Network configurations
+const NETWORKS = [
+  {
+    name: "sepolia",
     isHub: true,
-    executionDelay: 86400 // 1 day in seconds
+    color: "#627EEA"
   },
-  amoy: {
-    chainId: 80002,
-    lzChainId: 40161,
-    rpc: "https://rpc-amoy.polygon.technology",
-    lzEndpoint: "0xf69186dfBa60DdB133E91E9A4B5673624293d8F8",
+  {
+    name: "amoy",
     isHub: false,
-    executionDelay: 86400 // 1 day in seconds
-  }
-};
-
-// Contract addresses (will be filled during deployment)
-const deployments = {
-  sepolia: {
-    token: "",
-    executor: "",
-    dvnConfig: ""
-  },
-  amoy: {
-    token: "",
-    executor: "",
-    dvnConfig: ""
-  }
-};
-
-// DVN configuration for enhanced security
-const dvnConfig = [
-  {
-    id: "blockdaemon",
-    name: "Blockdaemon",
-    address: "0x71D7a02d21aE5Cb957E6BfF9D6280e2fAa47E223", // Example address
-    description: "Enterprise-grade blockchain infrastructure provider",
-    enabled: true,
-    requiredSignatures: 1
-  },
-  {
-    id: "layerzero",
-    name: "LayerZero Labs",
-    address: "0xA658742d33ebd2ce2F0bdFf73515Aa797Fd161D9", // Example address
-    description: "Official validators operated by LayerZero team",
-    enabled: true,
-    requiredSignatures: 1
+    color: "#8247E5"
   }
 ];
 
+// Deployment directory for artifacts
+const DEPLOYMENTS_DIR = path.join(__dirname, "../deployments");
+
 async function main() {
-  console.log("Starting OmniGovern DAO deployment with LayerZero V2");
+  console.log("Starting OmniGovern DAO deployment...");
   
-  // Deploy to Sepolia first (hub chain)
-  await deployToNetwork("sepolia");
-  
-  // Deploy to Amoy (satellite chain)
-  await deployToNetwork("amoy");
-  
-  // Set up trusted remotes
-  await configureTrustedRemotes();
-  
-  // Save deployments to file
-  const deploymentsDir = path.join(__dirname, "../deployments");
-  if (!fs.existsSync(deploymentsDir)) {
-    fs.mkdirSync(deploymentsDir);
+  // Create deployments directory if it doesn't exist
+  if (!fs.existsSync(DEPLOYMENTS_DIR)) {
+    fs.mkdirSync(DEPLOYMENTS_DIR);
   }
   
-  fs.writeFileSync(
-    path.join(deploymentsDir, "omnigovern-deployments.json"),
-    JSON.stringify(deployments, null, 2)
-  );
+  // Check if we're deploying to multiple networks
+  const deployToAll = process.env.DEPLOY_ALL === "true";
   
-  console.log("Deployment complete! Deployment info saved to deployments/omnigovern-deployments.json");
+  if (deployToAll) {
+    // Deploy to all networks
+    for (const network of NETWORKS) {
+      console.log(`\nDeploying to ${network.name}...`);
+      await deployToNetwork(network);
+    }
+    
+    // Configure trusted remotes after all deployments
+    console.log("\nConfiguring trusted remotes...");
+    await configureTrustedRemotes();
+  } else {
+    // Deploy to current network
+    const networkName = hre.network.name;
+    const network = NETWORKS.find(n => n.name === networkName);
+    
+    if (!network) {
+      throw new Error(`Network ${networkName} not configured`);
+    }
+    
+    console.log(`\nDeploying to ${network.name}...`);
+    await deployToNetwork(network);
+  }
+  
+  console.log("\nDeployment complete!");
 }
 
 async function deployToNetwork(network) {
-  console.log(`\nDeploying to ${network}...`);
+  // Get network-specific configuration
+  const endpoint = ENDPOINTS[network.name];
+  if (!endpoint) {
+    throw new Error(`No endpoint configured for ${network.name}`);
+  }
   
-  // Connect to the network
-  const provider = new ethers.providers.JsonRpcProvider(config[network].rpc);
+  // Get signer
+  const [deployer] = await hre.ethers.getSigners();
+  console.log(`Deploying with account: ${deployer.address}`);
   
-  // You need to provide a private key or connect to a wallet here
-  // For example: const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
-  // For demo purposes, we'll just use a placeholder
-  const wallet = ethers.Wallet.createRandom().connect(provider);
+  // Deploy LayerZeroV2Adapter
+  console.log("Deploying LayerZeroV2Adapter...");
+  const LayerZeroV2Adapter = await hre.ethers.getContractFactory("LayerZeroV2Adapter");
+  const adapter = await LayerZeroV2Adapter.deploy(endpoint, deployer.address);
+  await adapter.deployed();
+  console.log(`LayerZeroV2Adapter deployed to: ${adapter.address}`);
   
-  console.log(`Connected to ${network}`);
-  
-  // Deploy token contract
-  const OmniGovernToken = await ethers.getContractFactory("OmniGovernToken", wallet);
-  const token = await OmniGovernToken.deploy(
-    "OmniGovernToken",
-    "OGT",
-    config[network].lzEndpoint,
-    wallet.address
-  );
-  await token.deployed();
-  console.log(`OmniGovernToken deployed to ${network} at ${token.address}`);
-  deployments[network].token = token.address;
-  
-  // Deploy DVN config manager
-  const DVNConfigManager = await ethers.getContractFactory("DVNConfigManager", wallet);
-  const dvnManager = await DVNConfigManager.deploy(wallet.address);
+  // Deploy DVNConfigManager
+  console.log("Deploying DVNConfigManager...");
+  const DVNConfigManager = await hre.ethers.getContractFactory("DVNConfigManager");
+  const dvnManager = await DVNConfigManager.deploy(endpoint, deployer.address);
   await dvnManager.deployed();
-  console.log(`DVNConfigManager deployed to ${network} at ${dvnManager.address}`);
-  deployments[network].dvnConfig = dvnManager.address;
+  console.log(`DVNConfigManager deployed to: ${dvnManager.address}`);
   
-  // Configure DVNs
-  for (const dvn of dvnConfig) {
-    await dvnManager.addDVN(
-      dvn.id,
-      dvn.address,
-      dvn.name,
-      dvn.description,
-      dvn.enabled,
-      dvn.requiredSignatures
-    );
-    console.log(`Added DVN ${dvn.name} to configuration`);
+  // Deploy OmniGovernToken - only on the hub chain
+  let tokenAddress = "";
+  if (network.isHub) {
+    console.log("Deploying OmniGovernToken...");
+    const OmniGovernToken = await hre.ethers.getContractFactory("OmniGovernToken");
+    const token = await OmniGovernToken.deploy(endpoint, deployer.address);
+    await token.deployed();
+    tokenAddress = token.address;
+    console.log(`OmniGovernToken deployed to: ${token.address}`);
+  } else {
+    // On non-hub chains, we'll use the OFT from the hub
+    console.log("OmniGovernToken will be connected from hub chain");
   }
   
-  await dvnManager.setMinRequiredDVNs(2);
-  console.log("Set minimum required DVNs to 2");
+  // Deploy OmniProposalExecutor
+  console.log("Deploying OmniProposalExecutor...");
+  const OmniProposalExecutor = await hre.ethers.getContractFactory("OmniProposalExecutor");
+  const executor = await OmniProposalExecutor.deploy(endpoint, deployer.address);
+  await executor.deployed();
+  console.log(`OmniProposalExecutor deployed to: ${executor.address}`);
   
-  // Apply DVN config to endpoint
-  await dvnManager.applyDVNConfigToEndpoint(
-    config[network].lzEndpoint,
-    config[network].lzChainId
-  );
-  console.log("Applied DVN configuration to endpoint");
+  // Save deployment
+  const deployment = {
+    network: network.name,
+    chainId: CHAIN_IDS[network.name],
+    endpoint: endpoint,
+    contracts: {
+      adapter: adapter.address,
+      dvnManager: dvnManager.address,
+      token: tokenAddress,
+      executor: executor.address
+    },
+    deployer: deployer.address,
+    timestamp: new Date().toISOString()
+  };
   
-  // Deploy executor (if this is the hub)
-  if (config[network].isHub) {
-    const OmniProposalExecutor = await ethers.getContractFactory("OmniProposalExecutor", wallet);
-    const executor = await OmniProposalExecutor.deploy(
-      config[network].lzEndpoint,
-      token.address,
-      config[network].executionDelay,
-      wallet.address
-    );
-    await executor.deployed();
-    console.log(`OmniProposalExecutor deployed to ${network} at ${executor.address}`);
-    deployments[network].executor = executor.address;
-  }
+  const deploymentPath = path.join(DEPLOYMENTS_DIR, `${network.name}.json`);
+  fs.writeFileSync(deploymentPath, JSON.stringify(deployment, null, 2));
+  console.log(`Deployment saved to ${deploymentPath}`);
   
-  console.log(`Deployment to ${network} complete!`);
+  return deployment;
 }
 
 async function configureTrustedRemotes() {
-  console.log("\nConfiguring trusted remotes between chains...");
+  // Load all deployments
+  const deployments = {};
+  for (const network of NETWORKS) {
+    const deploymentPath = path.join(DEPLOYMENTS_DIR, `${network.name}.json`);
+    if (fs.existsSync(deploymentPath)) {
+      deployments[network.name] = JSON.parse(fs.readFileSync(deploymentPath));
+    }
+  }
   
-  // This would be implemented to connect the contracts across chains
-  // For example, setting up the OFT contract's trusted remotes:
-  // await token.setTrustedRemote(targetLzChainId, targetContractAddress);
+  // Get the hub deployment
+  const hub = NETWORKS.find(n => n.isHub);
+  if (!hub || !deployments[hub.name]) {
+    throw new Error("Hub deployment not found");
+  }
   
-  console.log("Trusted remote configuration complete!");
+  // Configure each network
+  for (const network of NETWORKS) {
+    // Skip if deployment doesn't exist
+    if (!deployments[network.name]) continue;
+    
+    // Set the current network
+    await hre.network.provider.request({
+      method: "hardhat_changeNetwork",
+      params: [network.name]
+    });
+    
+    console.log(`Configuring trusted remotes for ${network.name}...`);
+    
+    // Get adapter contract
+    const adapter = await hre.ethers.getContractAt(
+      "LayerZeroV2Adapter", 
+      deployments[network.name].contracts.adapter
+    );
+    
+    // Get executor contract
+    const executor = await hre.ethers.getContractAt(
+      "OmniProposalExecutor", 
+      deployments[network.name].contracts.executor
+    );
+    
+    // Authorize the executor as a handler for the adapter
+    await adapter.authorizeHandler(executor.address, true);
+    console.log(`Authorized executor as handler for adapter`);
+    
+    // If this is the hub, configure all satellite chains
+    if (network.isHub) {
+      // Get token
+      const token = await hre.ethers.getContractAt(
+        "OmniGovernToken", 
+        deployments[network.name].contracts.token
+      );
+      
+      // For each satellite, configure the chain on the executor
+      for (const satellite of NETWORKS.filter(n => !n.isHub)) {
+        // Skip if satellite deployment doesn't exist
+        if (!deployments[satellite.name]) continue;
+        
+        const satelliteId = CHAIN_IDS[satellite.name];
+        
+        // Configure satellite chain on the executor
+        await executor.configureChain(
+          satelliteId,
+          satellite.name,
+          deployments[satellite.name].contracts.executor
+        );
+        console.log(`Configured ${satellite.name} on hub executor`);
+      }
+    } 
+    // If this is a satellite, configure the hub
+    else {
+      const hubId = CHAIN_IDS[hub.name];
+      
+      // Configure hub chain on the executor
+      await executor.configureChain(
+        hubId,
+        hub.name,
+        deployments[hub.name].contracts.executor
+      );
+      console.log(`Configured ${hub.name} on satellite executor`);
+    }
+  }
 }
 
-// Execute the script
 main()
   .then(() => process.exit(0))
   .catch((error) => {

@@ -1,210 +1,218 @@
-// Basic testing script for cross-chain voting with OmniGovern DAO
-// This script sends a test vote from one chain to another using LayerZero
-
-const { ethers } = require("hardhat");
+// Test script for cross-chain voting using LayerZero V2
+const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
-// Load deployments
-const deploymentsPath = path.join(__dirname, "../../deployments/omnigovern-deployments.json");
-let deployments;
+// LayerZero V2 options (simplified)
+const LZ_OPTIONS = "0x"; // Default empty options
 
-try {
-  deployments = JSON.parse(fs.readFileSync(deploymentsPath, "utf8"));
-} catch (e) {
-  console.error("Error loading deployments file. Make sure to run deploy-omnigovern-v2.js first.");
-  process.exit(1);
-}
+// Constants
+const HUB_NETWORK = "sepolia";
+const SATELLITE_NETWORK = "amoy";
 
-// Configuration for testnets
-const config = {
-  sepolia: {
-    chainId: 11155111,
-    lzChainId: 10161,
-    rpc: "https://sepolia.infura.io/v3/YOUR_INFURA_KEY", // Replace with your key
-    lzEndpoint: "0xae92d5aD7583AD66E49A0c67BAd18F6ba52dDDc1",
-    isHub: true
-  },
-  amoy: {
-    chainId: 80002,
-    lzChainId: 40161,
-    rpc: "https://rpc-amoy.polygon.technology",
-    lzEndpoint: "0xf69186dfBa60DdB133E91E9A4B5673624293d8F8",
-    isHub: false
-  }
-};
-
-// Test parameters
-const testProposalParams = {
-  title: "Test Proposal: Increase Fee to 0.5%",
-  description: "This is a test proposal to increase the protocol fee from 0.1% to 0.5%.",
-  startTime: Math.floor(Date.now() / 1000) + 60, // Start in 1 minute
-  endTime: Math.floor(Date.now() / 1000) + 3600 // End in 1 hour
-};
+// Deployment directory
+const DEPLOYMENTS_DIR = path.join(__dirname, "../../deployments");
 
 async function main() {
-  console.log("Starting cross-chain voting test for OmniGovern DAO");
+  console.log("Testing cross-chain voting...");
   
-  // Create a test proposal on the hub chain
+  // Load deployments
+  const hubDeployment = loadDeployment(HUB_NETWORK);
+  const satelliteDeployment = loadDeployment(SATELLITE_NETWORK);
+  
+  if (!hubDeployment || !satelliteDeployment) {
+    console.error("Missing deployments. Please deploy contracts first.");
+    process.exit(1);
+  }
+  
+  // Create test proposal
+  console.log("\n1. Creating a test proposal on hub chain...");
+  await hre.network.provider.request({
+    method: "hardhat_changeNetwork",
+    params: [HUB_NETWORK]
+  });
+  
   const proposalId = await createProposal();
   
-  // Cast a vote from the satellite chain
+  // Cast votes from satellite chain
+  console.log("\n2. Casting votes from satellite chain...");
+  await hre.network.provider.request({
+    method: "hardhat_changeNetwork",
+    params: [SATELLITE_NETWORK]
+  });
+  
   await castCrossChainVote(proposalId);
   
-  // Check the voting status on the hub chain
+  // Check voting status on hub
+  console.log("\n3. Checking voting status on hub chain...");
+  await hre.network.provider.request({
+    method: "hardhat_changeNetwork",
+    params: [HUB_NETWORK]
+  });
+  
   await checkVotingStatus(proposalId);
   
-  console.log("Cross-chain voting test completed successfully!");
+  console.log("\nCross-chain voting test complete!");
 }
 
+// Load deployment for a network
+function loadDeployment(network) {
+  const deploymentPath = path.join(DEPLOYMENTS_DIR, `${network}.json`);
+  if (!fs.existsSync(deploymentPath)) {
+    console.error(`Deployment for ${network} not found at ${deploymentPath}`);
+    return null;
+  }
+  return JSON.parse(fs.readFileSync(deploymentPath));
+}
+
+// Create a test proposal on the hub chain
 async function createProposal() {
-  console.log("\nCreating a test proposal on Sepolia (hub chain)...");
+  // Get the hub deployment
+  const deployment = loadDeployment(HUB_NETWORK);
   
-  // Connect to the hub chain
-  const provider = new ethers.providers.JsonRpcProvider(config.sepolia.rpc);
+  // Get signer
+  const [deployer] = await hre.ethers.getSigners();
+  console.log(`Using account: ${deployer.address}`);
   
-  // In a real test, you would use a funded account with a private key
-  // For demo purposes, we'll use a placeholder (this would fail in reality)
-  const wallet = new ethers.Wallet.createRandom().connect(provider);
+  // Get executor contract
+  const executor = await hre.ethers.getContractAt(
+    "OmniProposalExecutor", 
+    deployment.contracts.executor
+  );
   
-  console.log("Connected to Sepolia");
+  // Create a simple proposal that does nothing (for testing)
+  const title = "Test Proposal";
+  const description = "This is a test proposal for cross-chain voting";
+  const targets = [deployment.contracts.executor]; // Target the executor itself
+  const calldatas = ["0x"]; // Empty calldata (no-op)
   
-  // Connect to the token contract on Sepolia
-  const tokenAddress = deployments.sepolia.token;
-  const tokenAbi = ["function createProposal(string, string, uint256, uint256) returns (bytes32)"];
-  const token = new ethers.Contract(tokenAddress, tokenAbi, wallet);
+  console.log(`Creating proposal: "${title}"`);
+  console.log(`Description: ${description}`);
   
-  console.log("Creating proposal...");
-  // This would fail without a real wallet with tokens
-  try {
-    const tx = await token.createProposal(
-      testProposalParams.title,
-      testProposalParams.description,
-      testProposalParams.startTime,
-      testProposalParams.endTime
-    );
-    await tx.wait();
-    
-    // In reality, we would get the proposalId from the transaction logs
-    // For demo purposes, we'll create a mock proposalId
-    const mockProposalId = ethers.utils.id("test-proposal-" + Date.now());
-    console.log(`Proposal created with ID: ${mockProposalId}`);
-    return mockProposalId;
-  } catch (e) {
-    console.log("Note: This is a simulation. In a real test, you would need a funded account with tokens.");
-    const mockProposalId = ethers.utils.id("test-proposal-" + Date.now());
-    console.log(`Simulated proposal ID: ${mockProposalId}`);
-    return mockProposalId;
+  // Create the proposal
+  const tx = await executor.createProposal(
+    title,
+    description,
+    targets,
+    calldatas
+  );
+  
+  const receipt = await tx.wait();
+  
+  // Extract proposal ID from event
+  const event = receipt.events?.find(e => e.event === "ProposalCreated");
+  if (!event) {
+    throw new Error("ProposalCreated event not found");
   }
+  
+  const proposalId = event.args.proposalId.toString();
+  console.log(`Proposal created with ID: ${proposalId}`);
+  
+  return proposalId;
 }
 
+// Cast a cross-chain vote from a satellite chain
 async function castCrossChainVote(proposalId) {
-  console.log("\nCasting a cross-chain vote from Amoy...");
+  // Get the deployments
+  const hubDeployment = loadDeployment(HUB_NETWORK);
+  const satelliteDeployment = loadDeployment(SATELLITE_NETWORK);
   
-  // Connect to the satellite chain
-  const provider = new ethers.providers.JsonRpcProvider(config.amoy.rpc);
+  // Get signer
+  const [voter] = await hre.ethers.getSigners();
+  console.log(`Voting from account: ${voter.address}`);
   
-  // In a real test, you would use a funded account with a private key
-  const wallet = new ethers.Wallet.createRandom().connect(provider);
+  // Get the voter's token balance on the satellite chain
+  // In a real implementation, you'd interact with the OFT on the satellite chain
+  // For this test, we'll simulate it
   
-  console.log("Connected to Amoy");
+  // Get the adapter contract
+  const adapter = await hre.ethers.getContractAt(
+    "LayerZeroV2Adapter", 
+    satelliteDeployment.contracts.adapter
+  );
   
-  // Connect to the token contract on Amoy
-  const tokenAddress = deployments.amoy.token;
-  const tokenAbi = [
-    "function castCrossChainVote(bytes32, uint8, uint32, tuple(uint256,uint256), bytes) payable",
-    "function quoteFee(uint32, bytes, bytes) view returns (tuple(uint256,uint256))"
-  ];
-  const token = new ethers.Contract(tokenAddress, tokenAbi, wallet);
+  // Get the executor contract
+  const executor = await hre.ethers.getContractAt(
+    "OmniProposalExecutor", 
+    satelliteDeployment.contracts.executor
+  );
   
-  // Parameters for the vote
-  const support = 1; // 1 = For
-  const dstChainId = config.sepolia.lzChainId;
+  // Prepare vote message
+  const voteType = 1; // 1 = for, 2 = against, 3 = abstain
+  const voteMessage = hre.ethers.utils.defaultAbiCoder.encode(
+    ["uint256", "address", "uint8"], 
+    [proposalId, voter.address, voteType]
+  );
   
-  console.log("Preparing cross-chain vote...");
+  console.log("Voting FOR proposal from satellite chain...");
   
-  // In a real test, we would quote and pay the fee
-  // For demo purposes, we'll simulate this
-  try {
-    // This would prepare the payload and quote the fee
-    const payload = ethers.utils.defaultAbiCoder.encode(
-      ["bytes32", "uint8"],
-      [proposalId, support]
+  // Estimate message fee (if we were using real networks)
+  if (process.env.ESTIMATE_FEES === "true") {
+    // This would be used in a real testnet environment
+    const hubChainId = 40161; // Sepolia chain ID on LayerZero
+    const [nativeFee] = await adapter.quoteFee(
+      hubChainId, 
+      voteMessage, 
+      LZ_OPTIONS
     );
-    
-    // Quote the fee (this would fail without a real contract)
-    // const fee = await token.quoteFee(dstChainId, payload, "0x");
-    
-    // In reality, we would send the actual transaction
-    // const tx = await token.castCrossChainVote(
-    //   proposalId,
-    //   support,
-    //   dstChainId,
-    //   fee,
-    //   "0x",
-    //   { value: fee.nativeFee }
-    // );
-    // await tx.wait();
-    
-    console.log("Note: This is a simulation. In a real test, you would send an actual transaction.");
-    console.log(`Simulated casting a vote FOR proposal ${proposalId} from Amoy to Sepolia`);
-  } catch (e) {
-    console.log("Note: This is a simulation. In a real test, you would need a deployed contract and funded account.");
-    console.log(`Simulated casting a vote FOR proposal ${proposalId} from Amoy to Sepolia`);
+    console.log(`Estimated fee: ${hre.ethers.utils.formatEther(nativeFee)} ETH`);
   }
+  
+  // For testing, we're using a fixed amount
+  const msgValue = hre.ethers.utils.parseEther("0.01");
+  
+  // Send cross-chain vote
+  // In a real implementation, this would call a voting function that sends
+  // a message to the hub chain
+  
+  // For this test script, we'll simulate it by logging what would happen
+  console.log("Simulating cross-chain vote message...");
+  console.log(`From: ${satelliteDeployment.network}`);
+  console.log(`To: ${hubDeployment.network}`);
+  console.log(`Proposal ID: ${proposalId}`);
+  console.log(`Vote Type: ${voteType === 1 ? "FOR" : voteType === 2 ? "AGAINST" : "ABSTAIN"}`);
+  console.log(`Voter: ${voter.address}`);
+  
+  // In a real environment on testnet, we would do something like:
+  // await executor.voteOnProposal(proposalId, voteType, hubChainId, {
+  //   value: msgValue
+  // });
 }
 
+// Check voting status on the hub chain
 async function checkVotingStatus(proposalId) {
-  console.log("\nChecking voting status on Sepolia (hub chain)...");
+  // Get the hub deployment
+  const deployment = loadDeployment(HUB_NETWORK);
   
-  // Connect to the hub chain
-  const provider = new ethers.providers.JsonRpcProvider(config.sepolia.rpc);
-  const wallet = new ethers.Wallet.createRandom().connect(provider);
+  // Get the executor contract
+  const executor = await hre.ethers.getContractAt(
+    "OmniProposalExecutor", 
+    deployment.contracts.executor
+  );
   
-  console.log("Connected to Sepolia");
+  // Get proposal details
+  const proposal = await executor.getProposalDetails(proposalId);
+  console.log(`Proposal: ${proposal.title}`);
+  console.log(`Status: ${getStatusString(proposal.status)}`);
   
-  // Connect to the token contract on Sepolia
-  const tokenAddress = deployments.sepolia.token;
-  const tokenAbi = ["function getProposal(bytes32) view returns (tuple(address,string,string,uint256,uint256,uint256,uint256,uint256,uint8))"];
+  // In a real implementation with an actual voting contract
+  // you would check vote counts here
   
-  // In a real test, we would query the actual contract
-  // For demo purposes, we'll simulate this
-  try {
-    console.log("Note: This is a simulation. In a real test, you would query the actual contract.");
-    
-    // Simulate proposal data
-    const proposal = {
-      proposer: wallet.address,
-      title: testProposalParams.title,
-      description: testProposalParams.description,
-      startTime: testProposalParams.startTime,
-      endTime: testProposalParams.endTime,
-      forVotes: ethers.utils.parseEther("75000"),
-      againstVotes: ethers.utils.parseEther("25000"),
-      abstainVotes: ethers.utils.parseEther("5000"),
-      status: 0 // Active
-    };
-    
-    console.log("\nProposal Status:");
-    console.log(`ID: ${proposalId}`);
-    console.log(`Title: ${proposal.title}`);
-    console.log(`For: ${ethers.utils.formatEther(proposal.forVotes)} votes`);
-    console.log(`Against: ${ethers.utils.formatEther(proposal.againstVotes)} votes`);
-    console.log(`Abstain: ${ethers.utils.formatEther(proposal.abstainVotes)} votes`);
-    console.log(`Status: ${proposal.status === 0 ? 'Active' : proposal.status === 1 ? 'Succeeded' : 'Defeated'}`);
-    
-    // Simulate a cross-chain vote being received
-    console.log("\nSimulating received cross-chain vote from Amoy...");
-    console.log(`Updated For Votes: ${ethers.utils.formatEther(proposal.forVotes.add(ethers.utils.parseEther("10000")))} votes`);
-    
-    console.log("\nCross-chain voting was successfully simulated!");
-  } catch (e) {
-    console.log("Note: This is a simulation. In a real test, you would query the actual contract.");
-    console.log("Simulated checking voting status on Sepolia");
-  }
+  // Simulate vote results for this test
+  console.log("\nSimulated Vote Results:");
+  console.log("FOR: 12,500,000 votes");
+  console.log("AGAINST: 2,500,000 votes");
+  console.log("ABSTAIN: 500,000 votes");
+  console.log("Quorum: 15,500,000 / 10,000,000 required (155%)");
+  console.log("Result: Passed with 83% support");
 }
 
-// Execute the script
+// Get string representation of proposal status
+function getStatusString(status) {
+  const statuses = ["Pending", "Succeeded", "Failed", "Executed"];
+  return statuses[status] || "Unknown";
+}
+
 main()
   .then(() => process.exit(0))
   .catch((error) => {

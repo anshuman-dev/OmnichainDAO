@@ -1,207 +1,285 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
+import "@layerzerolabs/lz-evm-sdk-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title DVNConfigManager
- * @dev Manages DVN (Data Validation Network) configurations for LayerZero messaging
- * This contract allows configuration of DVNs for enhanced security of cross-chain messages
+ * @dev Handles configuration of Data Validation Networks (DVNs) for LayerZero security
  */
 contract DVNConfigManager is Ownable {
-    // Data structures
-    struct DVNInfo {
+    // LayerZero endpoint
+    ILayerZeroEndpointV2 public endpoint;
+    
+    // Registered DVNs
+    struct DVN {
         address dvnAddress;
         string name;
-        string description;
-        bool enabled;
         uint8 requiredSignatures;
+        bool enabled;
     }
     
-    // Storage
-    mapping(string => DVNInfo) private dvns;
-    string[] private dvnIds;
-    uint8 private minRequiredDVNs;
+    // Security configuration for a chain
+    struct SecurityConfig {
+        uint8 minRequiredDVNs;
+        bool trustedEndpointMode;
+        bool multiSignatureVerification;
+        uint32[] enabledDVNs; // Indexes into the dvns array
+    }
+    
+    // Map of DVN index to DVN details
+    mapping(uint32 => DVN) public dvns;
+    
+    // Total number of registered DVNs
+    uint32 public dvnCount;
+    
+    // Security configuration for each chain
+    mapping(uint32 => SecurityConfig) public chainSecurityConfigs;
     
     // Events
-    event DVNAdded(string indexed dvnId, address dvnAddress);
-    event DVNUpdated(string indexed dvnId, bool enabled, uint8 requiredSignatures);
-    event MinRequiredDVNsUpdated(uint8 previous, uint8 current);
-    event DVNConfigApplied(address indexed executor, uint32 dstChainId);
+    event DVNAdded(uint32 dvnId, address dvnAddress, string name);
+    event DVNEnabled(uint32 dvnId, bool enabled);
+    event DVNSignaturesUpdated(uint32 dvnId, uint8 requiredSignatures);
+    event SecurityConfigUpdated(uint32 chainId, uint8 minRequiredDVNs);
+    event TrustedEndpointModeUpdated(uint32 chainId, bool enabled);
+    event MultiSignatureVerificationUpdated(uint32 chainId, bool enabled);
     
     /**
-     * @dev Constructor initializes the DVN configuration manager
+     * @dev Constructor
+     * @param _endpoint The LayerZero endpoint
      * @param _owner The owner of the contract
      */
-    constructor(address _owner) {
-        transferOwnership(_owner);
-        minRequiredDVNs = 1; // Default to requiring at least 1 DVN
+    constructor(address _endpoint, address _owner) Ownable() {
+        endpoint = ILayerZeroEndpointV2(_endpoint);
+        _transferOwnership(_owner);
     }
     
     /**
-     * @dev Add a new DVN to the configuration
-     * @param _dvnId Unique identifier for the DVN
-     * @param _dvnAddress The address of the DVN
-     * @param _name Human-readable name for the DVN
-     * @param _description Description of the DVN
-     * @param _enabled Whether the DVN is initially enabled
-     * @param _requiredSignatures Number of signatures required from this DVN
+     * @dev Add a new DVN to the registry
+     * @param _dvnAddress The DVN contract address
+     * @param _name The DVN name
+     * @param _requiredSignatures The number of required signatures
      */
     function addDVN(
-        string memory _dvnId,
         address _dvnAddress,
         string memory _name,
-        string memory _description,
-        bool _enabled,
         uint8 _requiredSignatures
-    ) external onlyOwner {
-        require(bytes(_dvnId).length > 0, "DVN: ID cannot be empty");
-        require(_dvnAddress != address(0), "DVN: Address cannot be zero");
-        require(_requiredSignatures > 0, "DVN: Required signatures must be > 0");
-        require(dvns[_dvnId].dvnAddress == address(0), "DVN: ID already exists");
+    ) external onlyOwner returns (uint32) {
+        require(_dvnAddress != address(0), "DVN address cannot be zero");
+        require(_requiredSignatures > 0, "Required signatures must be > 0");
         
-        dvns[_dvnId] = DVNInfo({
+        uint32 dvnId = dvnCount++;
+        
+        dvns[dvnId] = DVN({
             dvnAddress: _dvnAddress,
             name: _name,
-            description: _description,
-            enabled: _enabled,
-            requiredSignatures: _requiredSignatures
+            requiredSignatures: _requiredSignatures,
+            enabled: true
         });
         
-        dvnIds.push(_dvnId);
+        emit DVNAdded(dvnId, _dvnAddress, _name);
         
-        emit DVNAdded(_dvnId, _dvnAddress);
+        return dvnId;
     }
     
     /**
-     * @dev Update an existing DVN's configuration
-     * @param _dvnId Unique identifier for the DVN
+     * @dev Toggle DVN enabled status
+     * @param _dvnId The DVN ID
      * @param _enabled Whether the DVN should be enabled
-     * @param _requiredSignatures Number of signatures required from this DVN
      */
-    function updateDVN(
-        string memory _dvnId,
-        bool _enabled,
-        uint8 _requiredSignatures
+    function setDVNEnabled(uint32 _dvnId, bool _enabled) external onlyOwner {
+        require(_dvnId < dvnCount, "Invalid DVN ID");
+        
+        dvns[_dvnId].enabled = _enabled;
+        
+        emit DVNEnabled(_dvnId, _enabled);
+    }
+    
+    /**
+     * @dev Update DVN required signatures
+     * @param _dvnId The DVN ID
+     * @param _requiredSignatures The new number of required signatures
+     */
+    function updateDVNSignatures(uint32 _dvnId, uint8 _requiredSignatures) external onlyOwner {
+        require(_dvnId < dvnCount, "Invalid DVN ID");
+        require(_requiredSignatures > 0, "Required signatures must be > 0");
+        
+        dvns[_dvnId].requiredSignatures = _requiredSignatures;
+        
+        emit DVNSignaturesUpdated(_dvnId, _requiredSignatures);
+    }
+    
+    /**
+     * @dev Configure security settings for a chain
+     * @param _chainId The chain ID
+     * @param _minRequiredDVNs The minimum number of DVNs required
+     * @param _trustedEndpointMode Whether to enable trusted endpoint mode
+     * @param _multiSignatureVerification Whether to enable multi-signature verification
+     * @param _enabledDVNs The array of enabled DVN IDs
+     */
+    function configureChainSecurity(
+        uint32 _chainId,
+        uint8 _minRequiredDVNs,
+        bool _trustedEndpointMode,
+        bool _multiSignatureVerification,
+        uint32[] memory _enabledDVNs
     ) external onlyOwner {
-        require(bytes(_dvnId).length > 0, "DVN: ID cannot be empty");
-        require(dvns[_dvnId].dvnAddress != address(0), "DVN: DVN not found");
-        require(_requiredSignatures > 0, "DVN: Required signatures must be > 0");
+        require(_minRequiredDVNs > 0, "Min required DVNs must be > 0");
+        require(_enabledDVNs.length >= _minRequiredDVNs, "Not enough DVNs enabled");
         
-        DVNInfo storage dvn = dvns[_dvnId];
-        dvn.enabled = _enabled;
-        dvn.requiredSignatures = _requiredSignatures;
-        
-        emit DVNUpdated(_dvnId, _enabled, _requiredSignatures);
-    }
-    
-    /**
-     * @dev Set the minimum number of required DVNs
-     * @param _minRequired Minimum number of DVNs that must verify messages
-     */
-    function setMinRequiredDVNs(uint8 _minRequired) external onlyOwner {
-        require(_minRequired > 0, "DVN: Min required must be > 0");
-        require(_minRequired <= dvnIds.length, "DVN: Min required exceeds available DVNs");
-        
-        uint8 previous = minRequiredDVNs;
-        minRequiredDVNs = _minRequired;
-        
-        emit MinRequiredDVNsUpdated(previous, _minRequired);
-    }
-    
-    /**
-     * @dev Check if current DVN configuration is valid
-     * @return isValid Whether the configuration is valid
-     */
-    function isValidConfig() public view returns (bool) {
-        uint8 enabledCount = 0;
-        
-        for (uint i = 0; i < dvnIds.length; i++) {
-            if (dvns[dvnIds[i]].enabled) {
-                enabledCount++;
-            }
+        // Validate all DVN IDs
+        for (uint256 i = 0; i < _enabledDVNs.length; i++) {
+            require(_enabledDVNs[i] < dvnCount, "Invalid DVN ID");
+            require(dvns[_enabledDVNs[i]].enabled, "DVN is not enabled");
         }
         
-        return enabledCount >= minRequiredDVNs;
-    }
-    
-    /**
-     * @dev Get all DVN IDs
-     * @return ids Array of DVN IDs
-     */
-    function getAllDVNIds() external view returns (string[] memory) {
-        return dvnIds;
-    }
-    
-    /**
-     * @dev Get information about a specific DVN
-     * @param _dvnId Unique identifier for the DVN
-     * @return dvnInfo The DVN information
-     */
-    function getDVNInfo(string memory _dvnId) external view returns (DVNInfo memory) {
-        return dvns[_dvnId];
-    }
-    
-    /**
-     * @dev Get the minimum required DVNs
-     * @return minRequired Minimum number of DVNs required
-     */
-    function getMinRequiredDVNs() external view returns (uint8) {
-        return minRequiredDVNs;
-    }
-    
-    /**
-     * @dev Build the DVN configuration for LayerZero
-     * @return dvnAddresses Array of DVN addresses
-     * @return requiredSignatures Array of required signatures for each DVN
-     */
-    function buildDVNConfig() 
-        public 
-        view 
-        returns (address[] memory dvnAddresses, uint8[] memory requiredSignatures) 
-    {
-        uint enabledCount = 0;
+        // Update configuration
+        chainSecurityConfigs[_chainId] = SecurityConfig({
+            minRequiredDVNs: _minRequiredDVNs,
+            trustedEndpointMode: _trustedEndpointMode,
+            multiSignatureVerification: _multiSignatureVerification,
+            enabledDVNs: _enabledDVNs
+        });
         
-        // Count enabled DVNs
-        for (uint i = 0; i < dvnIds.length; i++) {
-            if (dvns[dvnIds[i]].enabled) {
-                enabledCount++;
-            }
+        // Apply configuration to endpoint
+        _applyDVNConfiguration(_chainId);
+        
+        emit SecurityConfigUpdated(_chainId, _minRequiredDVNs);
+        emit TrustedEndpointModeUpdated(_chainId, _trustedEndpointMode);
+        emit MultiSignatureVerificationUpdated(_chainId, _multiSignatureVerification);
+    }
+    
+    /**
+     * @dev Set trusted endpoint mode for a chain
+     * @param _chainId The chain ID
+     * @param _enabled Whether to enable trusted endpoint mode
+     */
+    function setTrustedEndpointMode(uint32 _chainId, bool _enabled) external onlyOwner {
+        SecurityConfig storage config = chainSecurityConfigs[_chainId];
+        config.trustedEndpointMode = _enabled;
+        
+        _applyDVNConfiguration(_chainId);
+        
+        emit TrustedEndpointModeUpdated(_chainId, _enabled);
+    }
+    
+    /**
+     * @dev Set multi-signature verification for a chain
+     * @param _chainId The chain ID
+     * @param _enabled Whether to enable multi-signature verification
+     */
+    function setMultiSignatureVerification(uint32 _chainId, bool _enabled) external onlyOwner {
+        SecurityConfig storage config = chainSecurityConfigs[_chainId];
+        config.multiSignatureVerification = _enabled;
+        
+        _applyDVNConfiguration(_chainId);
+        
+        emit MultiSignatureVerificationUpdated(_chainId, _enabled);
+    }
+    
+    /**
+     * @dev Calculate the estimated message fee based on the security configuration
+     * @param _chainId The destination chain ID
+     * @param _baseGas The base gas amount
+     * @return The estimated message fee
+     */
+    function estimateMessageFee(uint32 _chainId, uint256 _baseGas) external view returns (uint256) {
+        SecurityConfig storage config = chainSecurityConfigs[_chainId];
+        
+        // Start with base gas
+        uint256 totalGas = _baseGas;
+        
+        // Add gas for each DVN (simplified calculation)
+        for (uint256 i = 0; i < config.enabledDVNs.length; i++) {
+            uint32 dvnId = config.enabledDVNs[i];
+            DVN storage dvn = dvns[dvnId];
+            
+            // Each signature verification costs more gas
+            uint256 dvnGas = 50000 * dvn.requiredSignatures;
+            totalGas += dvnGas;
         }
         
-        // Initialize arrays with the correct size
-        dvnAddresses = new address[](enabledCount);
-        requiredSignatures = new uint8[](enabledCount);
-        
-        // Fill arrays with enabled DVN data
-        uint index = 0;
-        for (uint i = 0; i < dvnIds.length; i++) {
-            DVNInfo memory dvn = dvns[dvnIds[i]];
-            if (dvn.enabled) {
-                dvnAddresses[index] = dvn.dvnAddress;
-                requiredSignatures[index] = dvn.requiredSignatures;
-                index++;
-            }
+        // Add more gas for advanced features
+        if (config.trustedEndpointMode) {
+            totalGas += 30000;
         }
         
-        return (dvnAddresses, requiredSignatures);
+        if (config.multiSignatureVerification) {
+            totalGas += 100000;
+        }
+        
+        // Convert gas to estimated fee (this is a simplified calculation)
+        uint256 gasPrice = 100 gwei; // An example gas price
+        return totalGas * gasPrice;
     }
     
     /**
-     * @dev Apply DVN configuration to a LayerZero endpoint
-     * This is a mock function since actual implementation would depend on the specific
-     * LayerZero endpoint implementation being used
-     * @param _endpoint The LayerZero endpoint address
-     * @param _dstChainId The destination chain ID to configure
+     * @dev Apply DVN configuration to the LayerZero endpoint
+     * @param _chainId The chain ID to configure
      */
-    function applyDVNConfigToEndpoint(address _endpoint, uint32 _dstChainId) external onlyOwner {
-        require(_endpoint != address(0), "DVN: Endpoint cannot be zero");
-        require(isValidConfig(), "DVN: Invalid configuration");
+    function _applyDVNConfiguration(uint32 _chainId) internal {
+        SecurityConfig storage config = chainSecurityConfigs[_chainId];
         
-        // In a real implementation, this would call the LayerZero endpoint to set the DVN configuration
-        // Example: ILayerZeroEndpoint(_endpoint).setDVNConfig(_dstChainId, dvnAddresses, requiredSignatures);
+        // Get addresses and signature requirements
+        address[] memory dvnAddresses = new address[](config.enabledDVNs.length);
+        uint8[] memory sigRequirements = new uint8[](config.enabledDVNs.length);
         
-        // For this simplified implementation, we just emit an event
-        emit DVNConfigApplied(msg.sender, _dstChainId);
+        for (uint256 i = 0; i < config.enabledDVNs.length; i++) {
+            uint32 dvnId = config.enabledDVNs[i];
+            DVN storage dvn = dvns[dvnId];
+            
+            dvnAddresses[i] = dvn.dvnAddress;
+            sigRequirements[i] = dvn.requiredSignatures;
+        }
+        
+        // Set DVN configuration on the endpoint
+        // This is a simplified version - in a real implementation, you'd use the actual
+        // endpoint configuration methods (varies by LayerZero version and implementation)
+        
+        // Example (this would need to be adapted to the actual LayerZero interface):
+        // endpoint.setDVNConfig(_chainId, dvnAddresses, sigRequirements, config.minRequiredDVNs);
+        // endpoint.setTrustedEndpointMode(_chainId, config.trustedEndpointMode);
+        // endpoint.setMultiSignatureVerification(_chainId, config.multiSignatureVerification);
+    }
+    
+    /**
+     * @dev Get the security score for a chain's configuration
+     * @param _chainId The chain ID
+     * @return score The security score (0-100)
+     */
+    function getSecurityScore(uint32 _chainId) external view returns (uint8) {
+        SecurityConfig storage config = chainSecurityConfigs[_chainId];
+        
+        if (config.enabledDVNs.length == 0) {
+            return 0; // No DVNs configured
+        }
+        
+        // Base score based on number of DVNs
+        uint8 score = uint8(config.enabledDVNs.length * 10);
+        
+        // Additional points for each signature required
+        uint8 sigScore = 0;
+        for (uint256 i = 0; i < config.enabledDVNs.length; i++) {
+            uint32 dvnId = config.enabledDVNs[i];
+            DVN storage dvn = dvns[dvnId];
+            sigScore += dvn.requiredSignatures * 5;
+        }
+        
+        // Cap signature score at 30
+        sigScore = sigScore > 30 ? 30 : sigScore;
+        score += sigScore;
+        
+        // Additional points for security features
+        if (config.trustedEndpointMode) {
+            score += 15;
+        }
+        
+        if (config.multiSignatureVerification) {
+            score += 25;
+        }
+        
+        // Ensure score doesn't exceed 100
+        return score > 100 ? 100 : score;
     }
 }

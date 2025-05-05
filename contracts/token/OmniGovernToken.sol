@@ -2,302 +2,111 @@
 pragma solidity ^0.8.17;
 
 import "@layerzerolabs/lz-evm-sdk-v2/contracts/oft/OFT.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "../interfaces/IOmniGovernToken.sol";
 
 /**
  * @title OmniGovernToken
- * @dev Implementation of the governance token that uses LayerZero OFT V2 for cross-chain functionality
- * This allows for a unified token across multiple chains with consistent cross-chain state
+ * @dev Cross-chain governance token built on LayerZero v2
+ * Combines OFT (Omnichain Fungible Token) with ERC20Votes for cross-chain governance
  */
-contract OmniGovernToken is OFT, Ownable, IOmniGovernToken {
-    using SafeMath for uint256;
-    
-    // Governance related storage
-    mapping(uint32 => uint256) private _chainVotingPower;
-    mapping(bytes32 => Proposal) private _proposals;
-    mapping(bytes32 => mapping(address => Vote)) private _votes;
-    
-    // Events
-    event ProposalCreated(
-        bytes32 indexed proposalId,
-        address proposer,
-        string title,
-        string description,
-        uint256 startTime,
-        uint256 endTime
-    );
-    
-    event VoteCast(
-        bytes32 indexed proposalId,
-        address indexed voter,
-        uint8 support,
-        uint256 weight
-    );
-    
-    event CrossChainVoteCast(
-        bytes32 indexed proposalId,
-        uint32 srcChainId,
-        uint256 totalWeight,
-        uint8 support
-    );
+contract OmniGovernToken is OFT, ERC20Votes, Ownable {
+    uint256 public constant MAX_SUPPLY = 100_000_000 * 10**18; // 100 million tokens
     
     /**
-     * @dev Constructor initializes the token with name, symbol, and decimals
-     * @param _name Token name
-     * @param _symbol Token symbol
-     * @param _endpoint LayerZero V2 endpoint address
-     * @param _owner Owner of the token contract
+     * @dev Constructor for OmniGovernToken
+     * @param _endpoint The LayerZero endpoint address
+     * @param _owner The owner of the contract
      */
-    constructor(
-        string memory _name,
-        string memory _symbol,
-        address _endpoint,
-        address _owner
-    ) OFT(_name, _symbol, 18, _endpoint) {
-        transferOwnership(_owner);
+    constructor(address _endpoint, address _owner) 
+        OFT("OmniGovernToken", "OGT", _endpoint) 
+        ERC20Permit("OmniGovernToken")
+    {
+        _transferOwnership(_owner);
+        
+        // Initial supply mint to the hub chain
+        _mint(_owner, MAX_SUPPLY);
     }
     
     /**
-     * @dev Creates a new proposal for cross-chain governance
-     * @param _title Title of the proposal
-     * @param _description Detailed description of the proposal
-     * @param _startTime When voting begins
-     * @param _endTime When voting ends
-     * @return proposalId The unique identifier for the proposal
+     * @dev Override _update to make it compatible with both OFT and ERC20Votes
      */
-    function createProposal(
-        string memory _title,
-        string memory _description,
-        uint256 _startTime,
-        uint256 _endTime
-    ) external override returns (bytes32) {
-        require(balanceOf(msg.sender) > 0, "OGT: Must hold tokens to create proposals");
-        require(_startTime >= block.timestamp, "OGT: Start time must be in the future");
-        require(_endTime > _startTime, "OGT: End time must be after start time");
-        
-        bytes32 proposalId = keccak256(abi.encodePacked(
-            msg.sender,
-            _title,
-            block.timestamp
-        ));
-        
-        Proposal storage proposal = _proposals[proposalId];
-        require(proposal.startTime == 0, "OGT: Proposal already exists");
-        
-        proposal.proposer = msg.sender;
-        proposal.title = _title;
-        proposal.description = _description;
-        proposal.startTime = _startTime;
-        proposal.endTime = _endTime;
-        proposal.status = ProposalStatus.Active;
-        
-        emit ProposalCreated(
-            proposalId,
-            msg.sender,
-            _title,
-            _description,
-            _startTime,
-            _endTime
-        );
-        
-        return proposalId;
+    function _update(address from, address to, uint256 amount) internal override(ERC20, ERC20Votes) {
+        super._update(from, to, amount);
     }
     
     /**
-     * @dev Casts a vote on a proposal
-     * @param _proposalId The unique identifier of the proposal
-     * @param _support 0=against, 1=for, 2=abstain
+     * @dev Override nonces to make it compatible with both OFT and ERC20Votes
      */
-    function castVote(bytes32 _proposalId, uint8 _support) external override {
-        address voter = msg.sender;
-        uint256 votingPower = balanceOf(voter);
-        
-        require(votingPower > 0, "OGT: Must have voting power to vote");
-        _castVote(_proposalId, voter, votingPower, _support);
+    function nonces(address owner) public view override(ERC20Permit, Nonceable) returns (uint256) {
+        return super.nonces(owner);
     }
     
     /**
-     * @dev Internal function to cast a vote
-     * @param _proposalId The unique identifier of the proposal
-     * @param _voter The address casting the vote
-     * @param _weight The voting weight
-     * @param _support 0=against, 1=for, 2=abstain
+     * @dev Override decimals to be 18 as required by LayerZero
      */
-    function _castVote(
-        bytes32 _proposalId,
-        address _voter,
-        uint256 _weight,
-        uint8 _support
-    ) internal {
-        Proposal storage proposal = _proposals[_proposalId];
-        require(proposal.startTime > 0, "OGT: Proposal does not exist");
-        require(block.timestamp >= proposal.startTime, "OGT: Voting not started");
-        require(block.timestamp <= proposal.endTime, "OGT: Voting ended");
-        require(_support <= 2, "OGT: Invalid vote type");
-        
-        Vote storage vote = _votes[_proposalId][_voter];
-        require(vote.hasVoted == false, "OGT: Already voted");
-        
-        vote.hasVoted = true;
-        vote.support = _support;
-        vote.weight = _weight;
-        
-        if (_support == 0) {
-            proposal.againstVotes = proposal.againstVotes.add(_weight);
-        } else if (_support == 1) {
-            proposal.forVotes = proposal.forVotes.add(_weight);
-        } else {
-            proposal.abstainVotes = proposal.abstainVotes.add(_weight);
-        }
-        
-        emit VoteCast(_proposalId, _voter, _support, _weight);
+    function decimals() public pure override returns (uint8) {
+        return 18;
     }
     
     /**
-     * @dev Sends a cross-chain vote via LayerZero
-     * @param _proposalId The unique identifier of the proposal
-     * @param _support 0=against, 1=for, 2=abstain
-     * @param _dstChainId The destination chain ID (LayerZero chain ID)
-     * @param _options Additional options for LayerZero
+     * @dev Burns tokens on the specified chain (used by governor)
+     * @param account The account to burn from
+     * @param amount The amount to burn
      */
-    function castCrossChainVote(
-        bytes32 _proposalId,
-        uint8 _support,
-        uint32 _dstChainId,
-        MessagingFee memory _msgFee,
-        bytes memory _options
-    ) external payable override {
-        address voter = msg.sender;
-        uint256 votingPower = balanceOf(voter);
+    function burn(address account, uint256 amount) external onlyOwner {
+        _burn(account, amount);
+    }
+    
+    /**
+     * @dev Mints tokens to the specified account (used in initial deployment and governance)
+     * @param account The account to mint to
+     * @param amount The amount to mint
+     */
+    function mint(address account, uint256 amount) external onlyOwner {
+        _mint(account, amount);
+    }
+    
+    /**
+     * @dev Cross-chain vote delegation
+     * @param dstEid The destination endpoint ID
+     * @param delegatee The address to delegate to
+     * @param options The LayerZero messaging options
+     */
+    function crossChainDelegate(
+        uint32 dstEid,
+        address delegatee,
+        bytes calldata options
+    ) external payable {
+        bytes memory payload = abi.encode(delegatee, msg.sender);
         
-        require(votingPower > 0, "OGT: Must have voting power to vote");
-        
-        // Store the vote locally first
-        _castVote(_proposalId, voter, votingPower, _support);
-        
-        // Prepare the message to send
-        bytes memory payload = abi.encode(
-            _proposalId,
-            lzChainId,  // LZ V2 uses local chain ID
-            votingPower,
-            _support
-        );
-        
-        // Send the cross-chain message
         _lzSend(
-            _dstChainId,
+            dstEid,
             payload,
-            _msgFee,
-            _options,
-            msg.value
+            options,
+            msg.value,
+            payable(msg.sender)
         );
     }
     
     /**
-     * @dev Receives cross-chain votes and aggregates them
-     * This function is called by LayerZero when a message arrives from another chain
+     * @dev Handles lzReceive from LayerZero with processing incoming messages
+     * @param _origin The origin endpoint and sender
+     * @param _guid The guid for the message
+     * @param _message The message being received
+     * @param _executor Who called lzReceive
+     * @param _extraData Any extra data
      */
     function _lzReceive(
         Origin memory _origin,
         bytes32 _guid,
-        bytes memory _message,
+        bytes calldata _message,
         address _executor,
-        bytes memory _extraData
+        bytes calldata _extraData
     ) internal override {
-        // Decode the message
-        (
-            bytes32 proposalId,
-            uint32 srcChainId,
-            uint256 votingPower,
-            uint8 support
-        ) = abi.decode(_message, (bytes32, uint32, uint256, uint8));
+        (address delegatee, address delegator) = abi.decode(_message, (address, address));
         
-        // Verify proposal exists
-        Proposal storage proposal = _proposals[proposalId];
-        require(proposal.startTime > 0, "OGT: Proposal does not exist");
-        require(block.timestamp >= proposal.startTime, "OGT: Voting not started");
-        require(block.timestamp <= proposal.endTime, "OGT: Voting ended");
-        
-        // Add the cross-chain vote
-        if (support == 0) {
-            proposal.againstVotes = proposal.againstVotes.add(votingPower);
-        } else if (support == 1) {
-            proposal.forVotes = proposal.forVotes.add(votingPower);
-        } else {
-            proposal.abstainVotes = proposal.abstainVotes.add(votingPower);
-        }
-        
-        // Update the chain's total voting power for this proposal
-        _chainVotingPower[srcChainId] = _chainVotingPower[srcChainId].add(votingPower);
-        
-        emit CrossChainVoteCast(proposalId, srcChainId, votingPower, support);
-    }
-    
-    /**
-     * @dev Gets the details of a proposal
-     * @param _proposalId The unique identifier of the proposal
-     * @return proposal The proposal details
-     */
-    function getProposal(bytes32 _proposalId) external view override returns (Proposal memory) {
-        return _proposals[_proposalId];
-    }
-    
-    /**
-     * @dev Checks whether a voter has voted on a proposal
-     * @param _proposalId The unique identifier of the proposal
-     * @param _voter The address to check
-     * @return hasVoted Whether the address has voted
-     * @return support The vote type (0=against, 1=for, 2=abstain)
-     * @return weight The voting weight
-     */
-    function getVote(bytes32 _proposalId, address _voter) external view override returns (
-        bool hasVoted,
-        uint8 support,
-        uint256 weight
-    ) {
-        Vote memory vote = _votes[_proposalId][_voter];
-        return (vote.hasVoted, vote.support, vote.weight);
-    }
-    
-    /**
-     * @dev Update proposal status based on votes
-     * @param _proposalId The unique identifier of the proposal
-     */
-    function updateProposalStatus(bytes32 _proposalId) external override {
-        Proposal storage proposal = _proposals[_proposalId];
-        require(proposal.startTime > 0, "OGT: Proposal does not exist");
-        require(block.timestamp > proposal.endTime, "OGT: Voting not ended");
-        require(proposal.status == ProposalStatus.Active, "OGT: Not in active state");
-        
-        uint256 totalVotes = proposal.forVotes.add(proposal.againstVotes).add(proposal.abstainVotes);
-        uint256 quorum = totalSupply().div(4); // 25% quorum
-        
-        if (totalVotes < quorum) {
-            proposal.status = ProposalStatus.Defeated;
-        } else if (proposal.forVotes > proposal.againstVotes) {
-            proposal.status = ProposalStatus.Succeeded;
-        } else {
-            proposal.status = ProposalStatus.Defeated;
-        }
-    }
-    
-    /**
-     * @dev Get the total voting power from a specific chain
-     * @param _chainId The LayerZero chain ID
-     * @return votingPower The total voting power from that chain
-     */
-    function getChainVotingPower(uint32 _chainId) external view override returns (uint256) {
-        return _chainVotingPower[_chainId];
-    }
-    
-    /**
-     * @dev Admin function to mint new tokens
-     * @param _to Address to mint tokens to
-     * @param _amount Amount of tokens to mint
-     */
-    function mint(address _to, uint256 _amount) external onlyOwner {
-        _mint(_to, _amount);
+        // Execute the delegation
+        _delegate(delegator, delegatee);
     }
 }
