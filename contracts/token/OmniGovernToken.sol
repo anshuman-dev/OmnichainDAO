@@ -53,6 +53,19 @@ contract OmniGovernToken is IOmniGovernToken, OFT, ERC20Votes, Ownable {
         
         // Mint initial supply to the owner
         _mint(_owner, _initialSupply);
+        
+        // Initialize minted amount tracking
+        _totalMinted = _initialSupply;
+    }
+    
+    /**
+     * @dev Set the supply consistency checker address
+     * @param _supplyChecker The address of the supply checker contract
+     */
+    function setSupplyChecker(address _supplyChecker) external onlyOwner {
+        require(_supplyChecker != address(0), "OmniGovernToken: Supply checker address cannot be zero");
+        supplyChecker = _supplyChecker;
+        emit SupplyCheckerSet(_supplyChecker);
     }
     
     /**
@@ -210,8 +223,72 @@ contract OmniGovernToken is IOmniGovernToken, OFT, ERC20Votes, Ownable {
         super._nonblockingLzReceive(srcChainId, srcAddress, nonce, payload);
     }
     
+    /**
+     * @dev Override ERC20's _mint to track total minted
+     */
+    function _mint(address account, uint256 amount) internal override {
+        super._mint(account, amount);
+        
+        // Track minted amount for supply consistency
+        _totalMinted += amount;
+    }
+    
+    /**
+     * @dev Override ERC20's _burn to track total burned
+     */
+    function _burn(address account, uint256 amount) internal override {
+        super._burn(account, amount);
+        
+        // Track burned amount for supply consistency
+        _totalBurned += amount;
+    }
+    
+    /**
+     * @dev Get supply consistency stats
+     * This function is used by the SupplyConsistencyChecker to audit token supply
+     */
+    function getSupplyConsistencyData() external view returns (uint256 totalSupply, uint256 totalMinted, uint256 totalBurned) {
+        return (totalSupply(), _totalMinted, _totalBurned);
+    }
+    
+    /**
+     * @dev Check if supply is consistent
+     * totalSupply should equal _totalMinted - _totalBurned
+     */
+    function checkSupplyConsistency() external view returns (bool isConsistent, uint256 expectedSupply, uint256 actualSupply) {
+        expectedSupply = _totalMinted - _totalBurned;
+        actualSupply = totalSupply();
+        isConsistent = (expectedSupply == actualSupply);
+        return (isConsistent, expectedSupply, actualSupply);
+    }
+    
+    /**
+     * @dev Reconcile supply if a mismatch is detected (only callable by supply checker)
+     */
+    function reconcileSupply(uint256 expectedSupply) external returns (bool) {
+        require(msg.sender == supplyChecker, "OmniGovernToken: Only supply checker can reconcile");
+        
+        uint256 currentSupply = totalSupply();
+        
+        if (currentSupply < expectedSupply) {
+            // Need to mint tokens to reconcile
+            _mint(address(this), expectedSupply - currentSupply);
+            emit SupplyReconciled(currentSupply, expectedSupply, true);
+            return true;
+        } else if (currentSupply > expectedSupply) {
+            // Need to burn tokens to reconcile
+            _burn(address(this), currentSupply - expectedSupply);
+            emit SupplyReconciled(currentSupply, expectedSupply, false);
+            return true;
+        }
+        
+        return false; // No reconciliation needed
+    }
+    
     // Events
     event TokensSent(address indexed from, uint16 indexed dstChainId, bytes32 indexed to, uint256 amount, uint256 fee, uint256 amountAfterFee);
     event BridgeFeeRateChanged(uint256 oldRate, uint256 newRate);
     event BridgeFeesWithdrawn(address indexed to, uint256 amount);
+    event SupplyCheckerSet(address indexed supplyChecker);
+    event SupplyReconciled(uint256 fromSupply, uint256 toSupply, bool isMint);
 }

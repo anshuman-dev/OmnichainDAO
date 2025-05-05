@@ -2,336 +2,224 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@layerzerolabs/lz-evm-v1-0.7/contracts/lzApp/NonblockingLzApp.sol";
-import "@layerzerolabs/lz-evm-v1-0.7/contracts/interfaces/ILayerZeroEndpoint.sol";
+import "../interfaces/IOmniGovernToken.sol";
 
 /**
  * @title SupplyConsistencyChecker
- * @dev Contract to verify and maintain token supply consistency across chains
- * This contract implements automated supply audits as required by the PRD
+ * @dev Contract to verify token supply consistency across chains
+ * in the OmniGovern ecosystem
  */
-contract SupplyConsistencyChecker is Ownable, NonblockingLzApp {
-    // Reference to the token contract
-    address public token;
+contract SupplyConsistencyChecker is Ownable {
+    // The OmniGovernToken to check
+    IOmniGovernToken public token;
     
-    // Supply data for the current chain
-    uint256 public localSupply;
-    uint256 public lastUpdateTimestamp;
+    // Mapping of chain ID to expected token supply
+    mapping(uint16 => uint256) public expectedSupplies;
     
-    // Supply data across chains
-    mapping(uint16 => ChainSupply) public chainSupplies;
+    // Last verified supply timestamp per chain
+    mapping(uint16 => uint256) public lastVerificationTime;
     
-    // Audit records
-    mapping(uint256 => SupplyAudit) public supplyAudits;
-    uint256 public auditCounter;
+    // Verification threshold (in seconds)
+    uint256 public verificationThreshold;
     
-    // Message types
-    uint16 public constant TYPE_SUPPLY_REQUEST = 1;
-    uint16 public constant TYPE_SUPPLY_RESPONSE = 2;
-    uint16 public constant TYPE_SUPPLY_AUDIT = 3;
+    // Maximum allowed supply deviation (in percentage, denominator: 10000)
+    uint256 public maxDeviationRate;
     
-    // Audit outcome status
-    enum AuditStatus {
-        Pending,
-        Verified,
-        Reconciled,
-        Failed
-    }
+    // Flag to enable automatic reconciliation
+    bool public autoReconciliationEnabled;
     
-    // Structure to store chain supply data
-    struct ChainSupply {
-        uint256 totalSupply;
-        uint256 lastUpdateTimestamp;
-        bool isRegistered;
-    }
-    
-    // Structure to store audit information
-    struct SupplyAudit {
-        uint256 timestamp;
-        uint256 totalExpectedSupply;
-        uint256 totalActualSupply;
-        AuditStatus status;
-        string details;
+    // Structure to track chain supply info
+    struct ChainSupplyInfo {
+        uint16 chainId;
+        string chainName;
+        uint256 reportedSupply;
+        uint256 expectedSupply;
+        bool verified;
+        uint256 lastVerified;
     }
     
     /**
-     * @dev Emitted when a supply audit is completed
-     */
-    event SupplyAuditCompleted(uint256 indexed auditId, AuditStatus status, uint256 expectedSupply, uint256 actualSupply);
-    
-    /**
-     * @dev Emitted when supply data is received from another chain
-     */
-    event SupplyDataReceived(uint16 indexed srcChainId, uint256 supply, uint256 timestamp);
-    
-    /**
-     * @dev Emitted when a supply mismatch is detected and reconciled
-     */
-    event SupplyReconciled(uint256 indexed auditId, uint256 expectedSupply, uint256 actualSupply, string details);
-    
-    /**
-     * @dev Constructor for SupplyConsistencyChecker
-     * @param _token The address of the OmniGovernToken
-     * @param _lzEndpoint The address of the LayerZero endpoint
+     * @dev Constructor
+     * @param _token The token address to monitor
      * @param _owner The owner of the contract
+     * @param _verificationThreshold Minimum time between verifications (in seconds)
+     * @param _maxDeviationRate Maximum allowed supply deviation rate (denominator: 10000)
      */
     constructor(
         address _token,
-        address _lzEndpoint,
-        address _owner
-    ) NonblockingLzApp(_lzEndpoint) Ownable(_owner) {
+        address _owner,
+        uint256 _verificationThreshold,
+        uint256 _maxDeviationRate
+    ) Ownable(_owner) {
         require(_token != address(0), "SupplyConsistencyChecker: Token address cannot be zero");
-        token = _token;
-        lastUpdateTimestamp = block.timestamp;
-    }
-    
-    /**
-     * @dev Updates the local supply data
-     * @return The current token supply
-     */
-    function updateLocalSupply() public returns (uint256) {
-        localSupply = IERC20(token).totalSupply();
-        lastUpdateTimestamp = block.timestamp;
-        return localSupply;
-    }
-    
-    /**
-     * @dev Requests supply data from another chain
-     * @param _dstChainId The destination chain ID
-     */
-    function requestSupplyData(uint16 _dstChainId) external payable onlyOwner {
-        // Update local supply first
-        updateLocalSupply();
+        require(_maxDeviationRate <= 1000, "SupplyConsistencyChecker: Max deviation rate too high");
         
-        // Prepare payload
-        bytes memory payload = abi.encode(
-            TYPE_SUPPLY_REQUEST,
-            block.timestamp
+        token = IOmniGovernToken(_token);
+        verificationThreshold = _verificationThreshold;
+        maxDeviationRate = _maxDeviationRate;
+        autoReconciliationEnabled = false;
+    }
+    
+    /**
+     * @dev Set expected supply for a chain
+     * @param _chainId Chain ID
+     * @param _expectedSupply Expected token supply on that chain
+     */
+    function setExpectedSupply(uint16 _chainId, uint256 _expectedSupply) external onlyOwner {
+        expectedSupplies[_chainId] = _expectedSupply;
+        emit ExpectedSupplySet(_chainId, _expectedSupply);
+    }
+    
+    /**
+     * @dev Set verification threshold
+     * @param _newThreshold New threshold in seconds
+     */
+    function setVerificationThreshold(uint256 _newThreshold) external onlyOwner {
+        verificationThreshold = _newThreshold;
+        emit VerificationThresholdSet(_newThreshold);
+    }
+    
+    /**
+     * @dev Set maximum deviation rate
+     * @param _newMaxDeviationRate New max deviation rate (denominator: 10000)
+     */
+    function setMaxDeviationRate(uint256 _newMaxDeviationRate) external onlyOwner {
+        require(_newMaxDeviationRate <= 1000, "SupplyConsistencyChecker: Max deviation rate too high");
+        maxDeviationRate = _newMaxDeviationRate;
+        emit MaxDeviationRateSet(_newMaxDeviationRate);
+    }
+    
+    /**
+     * @dev Enable/disable automatic reconciliation
+     * @param _enabled Whether auto reconciliation should be enabled
+     */
+    function setAutoReconciliation(bool _enabled) external onlyOwner {
+        autoReconciliationEnabled = _enabled;
+        emit AutoReconciliationSet(_enabled);
+    }
+    
+    /**
+     * @dev Verify token supply consistency
+     * @param _chainId Chain ID to verify
+     * @return verified Whether verification was successful
+     * @return deviation The deviation amount (if any)
+     */
+    function verifySupply(uint16 _chainId) public returns (bool verified, int256 deviation) {
+        // Ensure enough time has passed since last verification
+        require(
+            block.timestamp >= lastVerificationTime[_chainId] + verificationThreshold,
+            "SupplyConsistencyChecker: Verification too frequent"
         );
         
-        // Estimate fee
-        (uint256 fee, ) = lzEndpoint.estimateFees(
-            _dstChainId,
-            address(this),
-            payload,
-            false,
-            bytes("")
-        );
+        // Get actual token supply
+        (uint256 actualSupply, uint256 totalMinted, uint256 totalBurned) = token.getSupplyConsistencyData();
         
-        require(msg.value >= fee, "SupplyConsistencyChecker: Insufficient fee");
+        // Get expected supply
+        uint256 expectedSupply = expectedSupplies[_chainId];
         
-        // Send message to the destination chain
-        _lzSend(
-            _dstChainId,
-            payload,
-            payable(msg.sender),
-            address(0x0),
-            bytes(""),
-            msg.value
-        );
-    }
-    
-    /**
-     * @dev Responds to a supply data request
-     * @param _srcChainId The source chain ID
-     * @param _srcAddress The source address
-     * @param _timestamp The timestamp of the request
-     */
-    function sendSupplyResponse(uint16 _srcChainId, bytes memory _srcAddress, uint256 _timestamp) internal {
-        // Update local supply
-        updateLocalSupply();
-        
-        // Prepare payload
-        bytes memory payload = abi.encode(
-            TYPE_SUPPLY_RESPONSE,
-            localSupply,
-            block.timestamp,
-            _timestamp
-        );
-        
-        // Send message back to the source chain
-        // Assuming gas is paid by the contract
-        uint256 fee = 0.01 ether; // Simplified; in practice would use estimateFees
-        
-        // Ensure contract has enough balance
-        require(address(this).balance >= fee, "SupplyConsistencyChecker: Insufficient balance");
-        
-        _lzSend(
-            _srcChainId,
-            payload,
-            payable(address(this)),
-            address(0x0),
-            bytes(""),
-            fee
-        );
-    }
-    
-    /**
-     * @dev Handle a received cross-chain message
-     * @param _srcChainId Source chain ID
-     * @param _srcAddress Source address (in bytes)
-     * @param _nonce Nonce of the message
-     * @param _payload Payload of the message
-     */
-    function _nonblockingLzReceive(
-        uint16 _srcChainId,
-        bytes memory _srcAddress,
-        uint64 _nonce,
-        bytes memory _payload
-    ) internal override {
-        // Decode the message type
-        (uint16 messageType) = abi.decode(_payload[:32], (uint16));
-        
-        if (messageType == TYPE_SUPPLY_REQUEST) {
-            // Decode request timestamp
-            (,uint256 timestamp) = abi.decode(_payload, (uint16, uint256));
-            // Send back our supply data
-            sendSupplyResponse(_srcChainId, _srcAddress, timestamp);
-        } 
-        else if (messageType == TYPE_SUPPLY_RESPONSE) {
-            // Decode supply data
-            (,uint256 remoteSupply, uint256 responseTimestamp, uint256 requestTimestamp) = 
-                abi.decode(_payload, (uint16, uint256, uint256, uint256));
-            
-            // Update chain supply record
-            chainSupplies[_srcChainId] = ChainSupply({
-                totalSupply: remoteSupply,
-                lastUpdateTimestamp: responseTimestamp,
-                isRegistered: true
-            });
-            
-            // Emit event
-            emit SupplyDataReceived(_srcChainId, remoteSupply, responseTimestamp);
-        }
-        else if (messageType == TYPE_SUPPLY_AUDIT) {
-            // Decode audit data
-            (,uint256 auditId, uint256 expectedSupply) = 
-                abi.decode(_payload, (uint16, uint256, uint256));
-            
-            // Process audit data
-            processAuditData(_srcChainId, auditId, expectedSupply);
-        }
-        else {
-            revert("SupplyConsistencyChecker: Unknown message type");
-        }
-    }
-    
-    /**
-     * @dev Process audit data received from another chain
-     * @param _srcChainId The source chain ID
-     * @param _auditId The audit ID
-     * @param _expectedSupply The expected total supply
-     */
-    function processAuditData(uint16 _srcChainId, uint256 _auditId, uint256 _expectedSupply) internal {
-        // Logic to process audit data and potentially reconcile
-        updateLocalSupply();
-        
-        // Store audit record
-        supplyAudits[_auditId] = SupplyAudit({
-            timestamp: block.timestamp,
-            totalExpectedSupply: _expectedSupply,
-            totalActualSupply: localSupply,
-            status: _expectedSupply == localSupply ? AuditStatus.Verified : AuditStatus.Failed,
-            details: _expectedSupply == localSupply ? "Supply verified" : "Supply mismatch detected"
-        });
-        
-        // Emit event
-        emit SupplyAuditCompleted(_auditId, supplyAudits[_auditId].status, _expectedSupply, localSupply);
-    }
-    
-    /**
-     * @dev Initiates a supply audit across all registered chains
-     * @return The ID of the created audit
-     */
-    function initiateGlobalAudit() external onlyOwner returns (uint256) {
-        // Create a new audit record
-        uint256 auditId = ++auditCounter;
-        
-        // Update local supply
-        updateLocalSupply();
-        
-        uint256 expectedGlobalSupply = localSupply;
-        
-        // Initialize audit record
-        supplyAudits[auditId] = SupplyAudit({
-            timestamp: block.timestamp,
-            totalExpectedSupply: expectedGlobalSupply,
-            totalActualSupply: 0, // To be filled later
-            status: AuditStatus.Pending,
-            details: "Audit in progress"
-        });
-        
-        return auditId;
-    }
-    
-    /**
-     * @dev Checks supply consistency and reconciles if needed
-     * @param _auditId The ID of the audit to check
-     */
-    function checkSupplyConsistency(uint256 _auditId) external onlyOwner {
-        require(_auditId > 0 && _auditId <= auditCounter, "SupplyConsistencyChecker: Invalid audit ID");
-        require(supplyAudits[_auditId].status == AuditStatus.Pending, "SupplyConsistencyChecker: Audit not pending");
-        
-        uint256 totalSupplyAcrossChains = localSupply;
-        
-        // Collect supply data from all registered chains
-        for (uint16 i = 1; i < 10000; i++) { // Assuming maximum 10,000 chain IDs
-            if (chainSupplies[i].isRegistered) {
-                totalSupplyAcrossChains += chainSupplies[i].totalSupply;
-            }
-        }
-        
-        // Update audit with actual supply
-        SupplyAudit storage audit = supplyAudits[_auditId];
-        audit.totalActualSupply = totalSupplyAcrossChains;
-        
-        // Check if supplies match
-        if (audit.totalExpectedSupply == totalSupplyAcrossChains) {
-            audit.status = AuditStatus.Verified;
-            audit.details = "Supply verified across all chains";
+        // Calculate deviation
+        if (actualSupply > expectedSupply) {
+            deviation = int256(actualSupply - expectedSupply);
         } else {
-            audit.status = AuditStatus.Failed;
-            audit.details = "Supply mismatch detected";
-            
-            // In a real implementation, would include logic to reconcile
-            // This would involve mint or burn operations on specific chains
+            deviation = -int256(expectedSupply - actualSupply);
         }
         
-        // Emit event
-        emit SupplyAuditCompleted(_auditId, audit.status, audit.totalExpectedSupply, totalSupplyAcrossChains);
+        // Check if deviation is within acceptable range
+        uint256 deviationPercentage;
+        if (expectedSupply > 0) {
+            deviationPercentage = (uint256(deviation < 0 ? -deviation : deviation) * 10000) / expectedSupply;
+        } else {
+            deviationPercentage = actualSupply > 0 ? 10000 : 0; // 100% deviation if expected is 0 but actual is not
+        }
+        
+        verified = deviationPercentage <= maxDeviationRate;
+        
+        // Update last verification time
+        lastVerificationTime[_chainId] = block.timestamp;
+        
+        // If auto reconciliation is enabled and verification failed, attempt to reconcile
+        if (!verified && autoReconciliationEnabled) {
+            reconcileSupply(_chainId);
+        }
+        
+        emit SupplyVerified(_chainId, actualSupply, expectedSupply, verified, deviation);
+        
+        return (verified, deviation);
     }
     
     /**
-     * @dev Reconciles supply mismatch
-     * @param _auditId The ID of the failed audit to reconcile
+     * @dev Reconcile token supply if verification fails
+     * @param _chainId Chain ID to reconcile
+     * @return success Whether reconciliation was successful
      */
-    function reconcileSupplyMismatch(uint256 _auditId) external onlyOwner {
-        require(_auditId > 0 && _auditId <= auditCounter, "SupplyConsistencyChecker: Invalid audit ID");
-        require(supplyAudits[_auditId].status == AuditStatus.Failed, "SupplyConsistencyChecker: Audit not failed");
+    function reconcileSupply(uint16 _chainId) public returns (bool success) {
+        // Get expected supply
+        uint256 expectedSupply = expectedSupplies[_chainId];
         
-        SupplyAudit storage audit = supplyAudits[_auditId];
+        // Attempt to reconcile through the token contract
+        success = token.reconcileSupply(expectedSupply);
         
-        // In a real implementation, we would:
-        // 1. Calculate the difference between expected and actual supply
-        // 2. Determine which chain(s) have the mismatch
-        // 3. Send messages to those chains to mint or burn tokens
+        if (success) {
+            emit SupplyReconciled(_chainId, expectedSupply);
+        }
         
-        // For simplicity in this example:
-        audit.status = AuditStatus.Reconciled;
-        audit.details = "Supply manually reconciled";
-        
-        emit SupplyReconciled(_auditId, audit.totalExpectedSupply, audit.totalActualSupply, audit.details);
+        return success;
     }
     
     /**
-     * @dev Allow contract to receive Ether
+     * @dev Get all supply verification data
+     * @param _chainIds Array of chain IDs to get data for
+     * @return data Array of ChainSupplyInfo structs
      */
-    receive() external payable {}
-}
-
-/**
- * Minimal IERC20 interface needed for the checker
- */
-interface IERC20 {
-    function totalSupply() external view returns (uint256);
+    function getSupplyVerificationData(uint16[] calldata _chainIds) external view returns (ChainSupplyInfo[] memory data) {
+        data = new ChainSupplyInfo[](_chainIds.length);
+        
+        for (uint256 i = 0; i < _chainIds.length; i++) {
+            uint16 chainId = _chainIds[i];
+            string memory chainName = getChainName(chainId);
+            uint256 expectedSupply = expectedSupplies[chainId];
+            
+            // For actual supply, we need to query the token contract
+            // This won't be updated in real-time without an actual verification
+            (uint256 actualSupply, , ) = token.getSupplyConsistencyData();
+            
+            uint256 lastVerified = lastVerificationTime[chainId];
+            bool verified = lastVerified > 0 && 
+                            (block.timestamp - lastVerified <= verificationThreshold * 2);
+            
+            data[i] = ChainSupplyInfo({
+                chainId: chainId,
+                chainName: chainName,
+                reportedSupply: actualSupply,
+                expectedSupply: expectedSupply,
+                verified: verified,
+                lastVerified: lastVerified
+            });
+        }
+        
+        return data;
+    }
+    
+    /**
+     * @dev Get chain name from chain ID
+     * @param _chainId Chain ID
+     * @return chainName The name of the chain
+     */
+    function getChainName(uint16 _chainId) internal pure returns (string memory chainName) {
+        if (_chainId == 1) return "Ethereum";
+        if (_chainId == 10) return "Optimism";
+        if (_chainId == 56) return "BSC";
+        if (_chainId == 137) return "Polygon";
+        if (_chainId == 42161) return "Arbitrum";
+        if (_chainId == 43114) return "Avalanche";
+        return "Unknown";
+    }
+    
+    // Events
+    event ExpectedSupplySet(uint16 indexed chainId, uint256 expectedSupply);
+    event VerificationThresholdSet(uint256 threshold);
+    event MaxDeviationRateSet(uint256 rate);
+    event AutoReconciliationSet(bool enabled);
+    event SupplyVerified(uint16 indexed chainId, uint256 actualSupply, uint256 expectedSupply, bool verified, int256 deviation);
+    event SupplyReconciled(uint16 indexed chainId, uint256 targetSupply);
 }
