@@ -110,19 +110,19 @@ export default function OmniGovernDAO() {
                   <TabsList className="grid grid-cols-3 w-full max-w-lg mb-6 bg-gray-800">
                     <TabsTrigger 
                       value="voting"
-                      className="data-[state=active]:bg-primary"
+                      className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
                     >
                       Cross-Chain Voting
                     </TabsTrigger>
                     <TabsTrigger 
                       value="execution"
-                      className="data-[state=active]:bg-primary"
+                      className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
                     >
                       lzCompose Execution
                     </TabsTrigger>
                     <TabsTrigger 
                       value="dvn"
-                      className="data-[state=active]:bg-primary"
+                      className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
                     >
                       DVN Security
                     </TabsTrigger>
