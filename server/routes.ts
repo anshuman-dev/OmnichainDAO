@@ -312,73 +312,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Network not found" });
       }
       
-      // If we have the DVN Manager contract, fetch real data
-      if (CONTRACT_ADDRESSES[networkId]?.dvnManager && providers[networkId]) {
-        const dvnManager = new ethers.Contract(
-          CONTRACT_ADDRESSES[networkId].dvnManager,
-          DVN_MANAGER_ABI,
-          providers[networkId]
-        );
-        
-        // Get security score
-        const securityScore = await dvnManager.getSecurityScore(network.lzChainId);
-        
-        // Return DVN data
-        res.json({
-          networkId,
-          securityScore: securityScore.toNumber(),
-          securityLevel: securityScore < 40 ? "Low" : securityScore < 70 ? "Medium" : "High",
-          dvns: [
-            {
-              id: "default",
-              name: "LayerZero Default DVN",
-              enabled: true,
-              requiredSignatures: 1
-            },
-            {
-              id: "ultra", 
-              name: "Ultra Secure DVN",
-              enabled: securityScore >= 70,
-              requiredSignatures: 2
-            },
-            {
-              id: "lite",
-              name: "Lite DVN", 
-              enabled: securityScore < 40,
-              requiredSignatures: 1
-            }
-          ]
-        });
-      } else {
-        // Return simulated data based on the network
-        const securityScore = network.isHub ? 80 : 50;
-        
-        res.json({
-          networkId,
-          securityScore,
-          securityLevel: securityScore < 40 ? "Low" : securityScore < 70 ? "Medium" : "High",
-          dvns: [
-            {
-              id: "default",
-              name: "LayerZero Default DVN",
-              enabled: true,
-              requiredSignatures: 1
-            },
-            {
-              id: "ultra", 
-              name: "Ultra Secure DVN",
-              enabled: network.isHub, // Enabled on hub
-              requiredSignatures: 2
-            },
-            {
-              id: "lite",
-              name: "Lite DVN", 
-              enabled: !network.isHub, // Enabled on satellite
-              requiredSignatures: 1
-            }
-          ]
-        });
-      }
+      // For development purposes, use mock data instead of connecting to contracts
+      // This will be replaced with real contract interactions in production
+      const securityScore = network.isHub ? 80 : 50;
+      
+      res.json({
+        networkId,
+        securityScore,
+        securityLevel: securityScore < 40 ? "Low" : securityScore < 70 ? "Medium" : "High",
+        dvns: [
+          {
+            id: "default",
+            name: "LayerZero Default DVN",
+            enabled: true,
+            requiredSignatures: 1
+          },
+          {
+            id: "ultra", 
+            name: "Ultra Secure DVN",
+            enabled: network.isHub, // Enabled on hub
+            requiredSignatures: 2
+          },
+          {
+            id: "lite",
+            name: "Lite DVN", 
+            enabled: !network.isHub, // Enabled on satellite
+            requiredSignatures: 1
+          }
+        ]
+      });
     } catch (error) {
       console.error("Error getting DVN info:", error);
       res.status(500).json({ error: "Failed to get DVN information" });
@@ -474,46 +436,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "Hub network not configured" });
       }
       
-      if (CONTRACT_ADDRESSES[hubNetwork.id]?.executor && providers[hubNetwork.id]) {
-        const executor = new ethers.Contract(
-          CONTRACT_ADDRESSES[hubNetwork.id].executor,
-          EXECUTOR_ABI,
-          providers[hubNetwork.id]
-        );
-        
-        // Get proposal details
-        const details = await executor.getProposalDetails(proposalId);
-        
-        // Format details
-        const proposal = {
-          id: proposalId,
-          title: details[0],
-          description: details[1],
-          proposer: details[2],
-          status: ["Pending", "Succeeded", "Failed", "Executed"][details[3]],
-          executionTime: details[4].toNumber() > 0 ? new Date(details[4].toNumber() * 1000) : null
-        };
-        
-        res.json(proposal);
-      } else {
-        // Return simulated data
-        const proposal = {
-          id: proposalId || "1",
-          title: "Update Protocol Fee to 0.5%",
-          description: "This proposal aims to change the current protocol fee from 0.1% to 0.5% to better support ecosystem growth.",
-          proposer: "0x1234567890abcdef1234567890abcdef12345678",
-          status: "Active",
-          votes: {
-            for: 63.5,
-            against: 27.3,
-            abstain: 9.2,
-            total: 550000,
-            quorum: 500000
-          }
-        };
-        
-        res.json(proposal);
-      }
+      // For development purposes, use mock data
+      // Return simulated data
+      const proposal = {
+        id: proposalId || "1",
+        title: "Update Protocol Fee to 0.5%",
+        description: "This proposal aims to change the current protocol fee from 0.1% to 0.5% to better support ecosystem growth.",
+        proposer: "0x1234567890abcdef1234567890abcdef12345678",
+        status: "Active",
+        votes: {
+          for: 63.5,
+          against: 27.3,
+          abstain: 9.2,
+          total: 550000,
+          quorum: 500000
+        }
+      };
+      
+      res.json(proposal);
     } catch (error) {
       console.error("Error getting proposal:", error);
       res.status(500).json({ error: "Failed to get proposal details" });
