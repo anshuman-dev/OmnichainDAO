@@ -8,8 +8,8 @@ export function useNetwork() {
   const { isConnected, chainId } = useWallet();
   const { toast } = useToast();
   
-  const [networks, setNetworks] = useState<Network[]>(AVAILABLE_NETWORKS);
-  const [currentNetwork, setCurrentNetwork] = useState<Network | null>(null);
+  const [networks] = useState<Network[]>(AVAILABLE_NETWORKS);
+  const [currentNetwork, setCurrentNetworkState] = useState<Network>(networks[0]); // Default to first network
   const [gasPrice, setGasPrice] = useState<number>(0.10);
   
   // Set the current network based on the connected wallet's chainId
@@ -17,44 +17,28 @@ export function useNetwork() {
     if (isConnected && chainId) {
       const network = networks.find(n => n.chainId === chainId);
       if (network) {
-        setCurrentNetwork(network);
+        setCurrentNetworkState(network);
       } else {
         // If the chainId doesn't match any of our supported networks,
-        // default to Ethereum
-        setCurrentNetwork(networks[0]);
+        // default to the first network (Sepolia for LayerZero demo)
+        setCurrentNetworkState(networks[0]);
         
         toast({
           title: "Unsupported Network",
-          description: "Please switch to a supported network",
+          description: `Please switch to ${networks[0].name} or ${networks[1].name}`,
           variant: "destructive",
         });
       }
     } else if (networks.length > 0) {
-      // Default to Ethereum if not connected
-      setCurrentNetwork(networks[0]);
+      // Default to first network if not connected
+      setCurrentNetworkState(networks[0]);
     }
   }, [isConnected, chainId, networks, toast]);
   
   // Update gas price based on the current network
   useEffect(() => {
-    if (currentNetwork) {
-      // In a real implementation, this would fetch the current gas price
-      // from an API or directly from the blockchain
-      // For now, we'll simulate it
-      let price = 0.10;
-      
-      if (currentNetwork.id === 'ethereum') {
-        price = 0.25; // Higher gas for Ethereum
-      } else if (currentNetwork.id === 'polygon') {
-        price = 0.05; // Lower gas for Polygon
-      } else if (currentNetwork.id === 'arbitrum') {
-        price = 0.10; // Medium gas for Arbitrum
-      } else if (currentNetwork.id === 'base') {
-        price = 0.08; // Medium-low gas for Base
-      }
-      
-      setGasPrice(price);
-    }
+    // Use the network's gasPrice or default to 0.10 if not available
+    setGasPrice(currentNetwork.gasPrice || 0.10);
   }, [currentNetwork]);
   
   // Network switching function
@@ -75,10 +59,35 @@ export function useNetwork() {
         } catch (switchError: any) {
           // This error code indicates that the chain has not been added to MetaMask
           if (switchError.code === 4902) {
-            toast({
-              title: "Network not added",
-              description: `Please add ${network.name} to your wallet`,
-            });
+            // Add the chain to MetaMask
+            try {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [
+                  {
+                    chainId: `0x${network.chainId.toString(16)}`,
+                    chainName: network.name,
+                    nativeCurrency: {
+                      name: network.id === 'amoy' ? 'MATIC' : 'ETH',
+                      symbol: network.id === 'amoy' ? 'MATIC' : 'ETH',
+                      decimals: 18
+                    },
+                    rpcUrls: [network.id === 'sepolia' 
+                      ? 'https://sepolia.infura.io/v3/' 
+                      : 'https://rpc-amoy.polygon.technology'],
+                    blockExplorerUrls: [network.id === 'sepolia'
+                      ? 'https://sepolia.etherscan.io'
+                      : 'https://www.oklink.com/amoy']
+                  }
+                ]
+              });
+            } catch (addError) {
+              console.error("Error adding chain:", addError);
+              toast({
+                title: "Network add failed",
+                description: `Please add ${network.name} to your wallet manually`,
+              });
+            }
           } else {
             throw switchError;
           }
@@ -86,7 +95,14 @@ export function useNetwork() {
       }
       
       // Update current network in state
-      setCurrentNetwork(network);
+      setCurrentNetworkState(network);
+      
+      // Notify the user about the network change
+      toast({
+        title: "Network Changed",
+        description: `You are now connected to ${network.name}`,
+      });
+      
     } catch (error: any) {
       console.error("Error switching network:", error);
       toast({
@@ -100,10 +116,12 @@ export function useNetwork() {
   return {
     networks,
     networkStatus: networks, // Network status is the same as networks for now
-    currentNetwork,
+    currentNetwork, // Always returns a network (never null)
     gasPrice,
     setCurrentNetwork: (network: Network) => {
       switchNetwork(network.id);
-    }
+    },
+    // Helper function to check if a network is the hub
+    isHubNetwork: (network: Network) => network.isHub === true
   };
 }

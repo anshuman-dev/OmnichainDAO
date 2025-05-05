@@ -43,4 +43,9 @@ export interface Network {
   latency: number;
   gasPrice: number;
   txCount: number;
+  // LayerZero specific properties
+  layerZeroId?: number;  // LayerZero chain ID
+  color?: string;        // Network color for UI
+  isHub?: boolean;       // Whether this is the hub chain for governance
+  lzEndpoint?: string;   // LayerZero endpoint address
 }
