@@ -1,0 +1,12 @@
+{
+  "network": "sepolia",
+  "timestamp": "2025-05-05T04:00:00Z",
+  "contracts": {
+    "token": "0x8951cB1F5C2a61bFC1D78318008CDcc7a28fDB6E",
+    "executor": "0x4A93783AcB59A8ee172C2C01533485Db95c2fbA9",
+    "dvnManager": "0x6D1c889a4Cbe76e8e2f0C77c482692E4c1212820",
+    "adapter": "0x3E7eF8f50246982d2E7c17f77d58B6C424fBDE9C"
+  },
+  "lzEndpoint": "0xae92d5aD7583AD66E49A0c67BAd18F6ba52dDDc1",
+  "lzCompose": "0x65Ff8Ab751Ed49d54b0D9226d68128Ba4E836c5f"
+}

@@ -1,0 +1,12 @@
+{
+  "network": "amoy",
+  "timestamp": "2025-05-05T04:05:00Z",
+  "contracts": {
+    "token": "0x7C9f4aa4cE93f2119CD134EEB51c1646449f548a",
+    "executor": "0x5bA8abC6e18E81D671D16861CD3aa75a2C0F0E7d",
+    "dvnManager": "0x8F7492DE823025b4CfaAB1D34c58e546379DA1A3",
+    "adapter": "0x9Bc3e5658Aa337CB27E0a9Fd8BE9c1045D389B9E"
+  },
+  "lzEndpoint": "0x6EDCE65403992e310A62460808c4b910D972f10F",
+  "lzCompose": "0x70BDA08bDf33C47293d1b13E0d730a617Ba9b223"
+}
