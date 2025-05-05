@@ -1,14 +1,16 @@
 import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { ethers } from "ethers";
+import * as ethers from "ethers";
 import { useRef } from "react";
+
+// Ethereum type definitions are in client/src/types/ethereum.d.ts
 
 interface WalletState {
   isConnected: boolean;
   address: string | null;
   chainId: number | null;
   provider: any;
-  signer: ethers.Signer | null;
+  signer: ethers.ethers.Signer | null;
 }
 
 export function useWallet() {
@@ -25,10 +27,12 @@ export function useWallet() {
   const [showWalletModal, setShowWalletModal] = useState(false);
   
   const openWalletModal = useCallback(() => {
+    console.log("Opening wallet modal");
     setShowWalletModal(true);
   }, []);
   
   const closeWalletModal = useCallback(() => {
+    console.log("Closing wallet modal");
     setShowWalletModal(false);
   }, []);
   
@@ -42,9 +46,9 @@ export function useWallet() {
         
         if (storedAddress && storedChainId) {
           // Check if the wallet is still connected
-          if (window.ethereum && window.ethereum.isConnected && window.ethereum.selectedAddress) {
-            const provider = new ethers.BrowserProvider(window.ethereum);
-            const signer = await provider.getSigner();
+          if (window.ethereum && window.ethereum.selectedAddress) {
+            const provider = new ethers.ethers.providers.Web3Provider(window.ethereum);
+            const signer = provider.getSigner();
             
             setWalletState({
               isConnected: true,
@@ -66,6 +70,7 @@ export function useWallet() {
   }, []);
   
   const connectWallet = useCallback(async (providerType: string) => {
+    console.log(`Attempting to connect wallet: ${providerType}`);
     try {
       if (providerType === 'metamask') {
         if (!window.ethereum) {
@@ -77,19 +82,21 @@ export function useWallet() {
           return;
         }
         
-        const ethProvider = new ethers.BrowserProvider(window.ethereum);
-        const accounts = await ethProvider.send('eth_requestAccounts', []);
+        const ethProvider = new ethers.ethers.providers.Web3Provider(window.ethereum);
+        // Request accounts
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const signer = ethProvider.getSigner();
+        const address = await signer.getAddress();
         const network = await ethProvider.getNetwork();
-        const signer = await ethProvider.getSigner();
         
-        if (accounts.length > 0) {
+        if (address) {
           // Store wallet info
-          localStorage.setItem('wallet_address', accounts[0]);
+          localStorage.setItem('wallet_address', address);
           localStorage.setItem('wallet_chainId', network.chainId.toString());
           
           setWalletState({
             isConnected: true,
-            address: accounts[0],
+            address: address,
             chainId: Number(network.chainId),
             provider: ethProvider,
             signer
@@ -97,7 +104,7 @@ export function useWallet() {
           
           toast({
             title: "Wallet Connected",
-            description: `Connected to address ${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`,
+            description: `Connected to address ${address.substring(0, 6)}...${address.substring(38)}`,
           });
         }
       } else if (providerType === 'coinbase') {
