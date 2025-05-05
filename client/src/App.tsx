@@ -5,8 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import OmniGovernDAO from "@/pages/OmniGovernDAO";
 import NotFound from "@/pages/not-found";
-import { useWallet } from "@/hooks/useWallet";
-import WalletConnectModal from "@/components/WalletConnectModal";
+import WalletProvider from "./components/WalletProvider";
 
 function Router() {
   return (
@@ -19,19 +18,14 @@ function Router() {
 }
 
 function App() {
-  const { showWalletModal, closeWalletModal, connectWallet } = useWallet();
-
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <div className="main-background"></div>
-        <Toaster />
-        <Router />
-        <WalletConnectModal 
-          isOpen={showWalletModal} 
-          onClose={closeWalletModal} 
-          onConnect={connectWallet}
-        />
+        <WalletProvider>
+          <div className="main-background"></div>
+          <Toaster />
+          <Router />
+        </WalletProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

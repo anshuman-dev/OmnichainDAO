@@ -7,7 +7,7 @@ import LayerZeroDVNConfig from '@/components/LayerZeroDVNConfig';
 import LayerZeroCrossChainVote from '@/components/LayerZeroCrossChainVote';
 import LayerZeroAtomicExecution from '@/components/LayerZeroAtomicExecution';
 import SupplyConsistencyChecker from '@/components/SupplyConsistencyChecker';
-import { useWallet } from '@/hooks/useWallet';
+import { useWalletContext } from '@/components/WalletProvider';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useToast } from '@/hooks/use-toast';
 import ChainSelector from '@/components/ChainSelector';
@@ -53,7 +53,7 @@ const LZ_FEATURES = [
 
 export default function OmniGovernDAO() {
   const [activeTab, setActiveTab] = useState('overview');
-  const { isConnected, openWalletModal } = useWallet();
+  const { isConnected, openWalletModal } = useWalletContext();
   const { currentNetwork, setCurrentNetwork } = useNetwork();
   const { toast } = useToast();
   

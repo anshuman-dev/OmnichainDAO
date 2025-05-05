@@ -1,16 +1,20 @@
 import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import * as ethers from "ethers";
-import { useRef } from "react";
+import { ethers } from "ethers";
 
-// Ethereum type definitions are in client/src/types/ethereum.d.ts
+// Simple type definition for window.ethereum
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
 
 interface WalletState {
   isConnected: boolean;
   address: string | null;
   chainId: number | null;
   provider: any;
-  signer: ethers.ethers.Signer | null;
+  signer: ethers.Signer | null;
 }
 
 export function useWallet() {
@@ -44,20 +48,17 @@ export function useWallet() {
         const storedAddress = localStorage.getItem('wallet_address');
         const storedChainId = localStorage.getItem('wallet_chainId');
         
-        if (storedAddress && storedChainId) {
-          // Check if the wallet is still connected
-          if (window.ethereum && window.ethereum.selectedAddress) {
-            const provider = new ethers.ethers.providers.Web3Provider(window.ethereum);
-            const signer = provider.getSigner();
-            
-            setWalletState({
-              isConnected: true,
-              address: storedAddress,
-              chainId: parseInt(storedChainId),
-              provider,
-              signer
-            });
-          }
+        if (storedAddress && storedChainId && window.ethereum) {
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          const signer = provider.getSigner();
+          
+          setWalletState({
+            isConnected: true,
+            address: storedAddress,
+            chainId: parseInt(storedChainId),
+            provider,
+            signer
+          });
         }
       } catch (error) {
         console.error("Error checking wallet connection:", error);
@@ -82,31 +83,42 @@ export function useWallet() {
           return;
         }
         
-        const ethProvider = new ethers.ethers.providers.Web3Provider(window.ethereum);
-        // Request accounts
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
-        const signer = ethProvider.getSigner();
-        const address = await signer.getAddress();
-        const network = await ethProvider.getNetwork();
-        
-        if (address) {
-          // Store wallet info
-          localStorage.setItem('wallet_address', address);
-          localStorage.setItem('wallet_chainId', network.chainId.toString());
-          
-          setWalletState({
-            isConnected: true,
-            address: address,
-            chainId: Number(network.chainId),
-            provider: ethProvider,
-            signer
-          });
-          
+        // Request account access
+        try {
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+        } catch (error) {
+          console.error("User denied account access");
           toast({
-            title: "Wallet Connected",
-            description: `Connected to address ${address.substring(0, 6)}...${address.substring(38)}`,
+            title: "Connection Failed",
+            description: "You need to allow MetaMask access to continue.",
+            variant: "destructive",
           });
+          return;
         }
+        
+        // Get provider and signer
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const address = await signer.getAddress();
+        const { chainId } = await provider.getNetwork();
+        
+        // Store wallet info
+        localStorage.setItem('wallet_address', address);
+        localStorage.setItem('wallet_chainId', chainId.toString());
+        
+        setWalletState({
+          isConnected: true,
+          address: address,
+          chainId: chainId,
+          provider,
+          signer
+        });
+        
+        toast({
+          title: "Wallet Connected",
+          description: `Connected to address ${address.substring(0, 6)}...${address.substring(38)}`,
+        });
+        
       } else if (providerType === 'coinbase') {
         toast({
           title: "Coming Soon",
