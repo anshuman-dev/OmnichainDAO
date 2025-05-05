@@ -55,4 +55,33 @@ interface IOmniGovernToken {
      * @param to The address to send the fees to
      */
     function withdrawBridgeFees(address to) external;
+    
+    /**
+     * @dev Set the supply consistency checker address
+     * @param _supplyChecker The address of the supply checker contract
+     */
+    function setSupplyChecker(address _supplyChecker) external;
+    
+    /**
+     * @dev Get supply consistency stats
+     * @return totalSupply Current total supply
+     * @return totalMinted Total amount minted
+     * @return totalBurned Total amount burned
+     */
+    function getSupplyConsistencyData() external view returns (uint256 totalSupply, uint256 totalMinted, uint256 totalBurned);
+    
+    /**
+     * @dev Check if supply is consistent
+     * @return isConsistent Whether supply is consistent
+     * @return expectedSupply Expected supply based on mint/burn tracking
+     * @return actualSupply Actual supply reported by the token
+     */
+    function checkSupplyConsistency() external view returns (bool isConsistent, uint256 expectedSupply, uint256 actualSupply);
+    
+    /**
+     * @dev Reconcile supply if a mismatch is detected (only callable by supply checker)
+     * @param expectedSupply The expected supply to reconcile to
+     * @return success Whether reconciliation was successful
+     */
+    function reconcileSupply(uint256 expectedSupply) external returns (bool);
 }
