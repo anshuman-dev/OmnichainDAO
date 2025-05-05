@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@layerzerolabs/lz-evm-v1-0.7/contracts/token/oft/OFT.sol";
+import "@layerzerolabs/lz-evm-v1-0.7/contracts/lzApp/NonblockingLzApp.sol";
 import "../interfaces/IOmniGovernToken.sol";
 
 /**
@@ -17,6 +18,13 @@ contract OmniGovernToken is IOmniGovernToken, OFT, ERC20Votes, Ownable {
     
     // Accumulated bridge fees
     uint256 private _accumulatedBridgeFees;
+    
+    // Supply consistency checker
+    address public supplyChecker;
+    
+    // Total minted and burned supply (for consistency checking)
+    uint256 private _totalMinted;
+    uint256 private _totalBurned;
     
     /**
      * @dev Constructor for OmniGovernToken
