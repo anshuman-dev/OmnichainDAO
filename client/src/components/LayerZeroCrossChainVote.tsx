@@ -333,7 +333,7 @@ export default function LayerZeroCrossChainVote() {
                           (getSelectedProposal()?.votesAbstain || 0)
                         )} 
                         className="bg-muted h-2"
-                        indicatorClassName="bg-green-500"
+                        indicatorColor="bg-green-500"
                       />
                     </div>
                     
@@ -363,7 +363,7 @@ export default function LayerZeroCrossChainVote() {
                           (getSelectedProposal()?.votesAbstain || 0)
                         )} 
                         className="bg-muted h-2"
-                        indicatorClassName="bg-red-500"
+                        indicatorColor="bg-red-500"
                       />
                     </div>
                     
@@ -393,7 +393,7 @@ export default function LayerZeroCrossChainVote() {
                           (getSelectedProposal()?.votesAbstain || 0)
                         )} 
                         className="bg-muted h-2"
-                        indicatorClassName="bg-yellow-500"
+                        indicatorColor="bg-yellow-500"
                       />
                     </div>
                   </div>
@@ -421,7 +421,7 @@ export default function LayerZeroCrossChainVote() {
                         getSelectedProposal()?.quorum || 1
                       )} 
                       className="bg-muted h-2"
-                      indicatorClassName="bg-blue-500"
+                      indicatorColor="bg-blue-500"
                     />
                   </div>
                 </div>

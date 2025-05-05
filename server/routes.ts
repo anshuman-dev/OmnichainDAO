@@ -77,7 +77,8 @@ async function initializeWeb3() {
       
       // Try to load deployment info if it exists
       try {
-        const deploymentPath = path.join(__dirname, '../deployments', `${network.id}.json`);
+        // Since __dirname is not available in ESM, we'll use a relative path from the project root
+        const deploymentPath = path.join('./deployments', `${network.id}.json`);
         if (fs.existsSync(deploymentPath)) {
           const deployment = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
           if (deployment.contracts) {
@@ -237,7 +238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Format transaction hash to look like a real one
-      const txHash = `0x${ethers.utils.randomBytes(32).toString('hex')}`;
+      const txHash = `0x${Math.random().toString(16).substring(2, 34).padStart(64, '0')}`;
       
       const parsedData = {
         amount: validated.amount.toString(),
@@ -534,7 +535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Return simulated created proposal
-      const proposalId = ethers.utils.hexlify(ethers.utils.randomBytes(4));
+      const proposalId = `0x${Math.random().toString(16).substring(2, 10)}`;
       
       res.json({
         id: proposalId,
@@ -563,7 +564,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         proposalId,
-        executionId: ethers.utils.hexlify(ethers.utils.randomBytes(32)),
+        executionId: `0x${Math.random().toString(16).substring(2, 34).padStart(64, '0')}`,
         chains: chains.map(chainId => ({
           id: chainId,
           status: "Pending",
