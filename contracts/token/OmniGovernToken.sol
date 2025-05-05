@@ -10,21 +10,22 @@ import "../interfaces/IOmniGovernToken.sol";
 /**
  * @title OmniGovernToken
  * @dev Implementation of the OmniGovern DAO token with cross-chain capabilities
- * using LayerZero's OFT (Omnichain Fungible Token) standard
+ * using LayerZero's OFT (Omnichain Fungible Token) standard.
+ * Simplified to focus on core LayerZero OFT functionality with governance features.
  */
 contract OmniGovernToken is IOmniGovernToken, OFT, ERC20Votes, Ownable {
-    // Bridge fee rate (denominator is 1,000,000)
-    uint256 private _bridgeFeeRate;
+    // Hub chain ID for governance coordination
+    uint16 public hubChainId;
+    uint16 public constant HUB_CHAIN_ID_DEFAULT = 1; // Default to Ethereum mainnet
     
-    // Accumulated bridge fees
-    uint256 private _accumulatedBridgeFees;
+    // Mapping of proposal IDs to votes
+    mapping(uint256 => mapping(address => bool)) public hasVoted;
+    mapping(uint256 => uint256) public proposalVotes;
     
-    // Supply consistency checker
-    address public supplyChecker;
-    
-    // Total minted and burned supply (for consistency checking)
-    uint256 private _totalMinted;
-    uint256 private _totalBurned;
+    // LayerZero message types
+    uint8 public constant LZ_MESSAGE_TYPE_TRANSFER = 0;
+    uint8 public constant LZ_MESSAGE_TYPE_VOTE = 1;
+    uint8 public constant LZ_MESSAGE_TYPE_EXECUTE = 2;
     
     /**
      * @dev Constructor for OmniGovernToken
@@ -33,7 +34,7 @@ contract OmniGovernToken is IOmniGovernToken, OFT, ERC20Votes, Ownable {
      * @param _lzEndpoint LayerZero endpoint address
      * @param _owner Owner of the token contract
      * @param _initialSupply Initial token supply (all minted to the owner)
-     * @param _initialBridgeFeeRate Initial bridge fee rate
+     * @param _hubChainId The chain ID of the hub/coordinator chain
      */
     constructor(
         string memory _name,
@@ -41,31 +42,18 @@ contract OmniGovernToken is IOmniGovernToken, OFT, ERC20Votes, Ownable {
         address _lzEndpoint,
         address _owner,
         uint256 _initialSupply,
-        uint256 _initialBridgeFeeRate
+        uint16 _hubChainId
     )
         ERC20(_name, _symbol)
         ERC20Permit(_name)
         OFT(_lzEndpoint)
         Ownable(_owner)
     {
-        require(_initialBridgeFeeRate <= 10000, "OmniGovernToken: Bridge fee rate too high");
-        _bridgeFeeRate = _initialBridgeFeeRate;
+        // Set hub chain ID
+        hubChainId = _hubChainId == 0 ? HUB_CHAIN_ID_DEFAULT : _hubChainId;
         
         // Mint initial supply to the owner
         _mint(_owner, _initialSupply);
-        
-        // Initialize minted amount tracking
-        _totalMinted = _initialSupply;
-    }
-    
-    /**
-     * @dev Set the supply consistency checker address
-     * @param _supplyChecker The address of the supply checker contract
-     */
-    function setSupplyChecker(address _supplyChecker) external onlyOwner {
-        require(_supplyChecker != address(0), "OmniGovernToken: Supply checker address cannot be zero");
-        supplyChecker = _supplyChecker;
-        emit SupplyCheckerSet(_supplyChecker);
     }
     
     /**
@@ -88,16 +76,7 @@ contract OmniGovernToken is IOmniGovernToken, OFT, ERC20Votes, Ownable {
     }
     
     /**
-     * @dev Get the bridge fee for a specific amount
-     * @param amount The amount being bridged
-     * @return The fee amount
-     */
-    function getBridgeFee(uint256 amount) public view override returns (uint256) {
-        return (amount * _bridgeFeeRate) / 1_000_000;
-    }
-    
-    /**
-     * @dev Send tokens to another chain
+     * @dev Send tokens to another chain using LayerZero OFT
      * @param dstChainId The destination chain ID
      * @param to The recipient address
      * @param amount The amount to send
@@ -113,105 +92,137 @@ contract OmniGovernToken is IOmniGovernToken, OFT, ERC20Votes, Ownable {
         address zroPaymentAddress,
         bytes calldata adapterParams
     ) external payable override {
-        // Calculate and deduct bridge fee
-        uint256 fee = getBridgeFee(amount);
-        uint256 amountAfterFee = amount - fee;
-        
-        // Update accumulated fees
-        _accumulatedBridgeFees += fee;
-        
         // Send tokens to the destination chain
         _send(
             msg.sender,
             dstChainId,
             to,
-            amountAfterFee,
+            amount,
             refundAddress,
             zroPaymentAddress,
             adapterParams
         );
         
-        emit TokensSent(msg.sender, dstChainId, to, amount, fee, amountAfterFee);
+        emit TokensSent(msg.sender, dstChainId, to, amount);
     }
     
     /**
-     * @dev Set the bridge fee rate
-     * @param newBridgeFeeRate The new bridge fee rate
+     * @dev Set trusted remote address for a chain
+     * @param remoteChainId The remote chain ID
+     * @param path The path to the remote contract
      */
-    function setBridgeFeeRate(uint256 newBridgeFeeRate) external override onlyOwner {
-        require(newBridgeFeeRate <= 10000, "OmniGovernToken: Bridge fee rate too high");
-        _bridgeFeeRate = newBridgeFeeRate;
-        emit BridgeFeeRateChanged(_bridgeFeeRate, newBridgeFeeRate);
+    function setTrustedRemote(uint16 remoteChainId, bytes calldata path) external override onlyOwner {
+        _setTrustedRemote(remoteChainId, path);
+        emit TrustedRemoteSet(remoteChainId, path);
     }
     
     /**
-     * @dev Get the current bridge fee rate
-     * @return The current bridge fee rate
+     * @dev Set trusted remote addresses for multiple chains
+     * @param remoteChainIds Array of remote chain IDs
+     * @param paths Array of paths to the remote contracts
      */
-    function bridgeFeeRate() external view override returns (uint256) {
-        return _bridgeFeeRate;
+    function setTrustedRemoteAddresses(uint16[] calldata remoteChainIds, bytes[] calldata paths) external onlyOwner {
+        require(remoteChainIds.length == paths.length, "OmniGovernToken: Array length mismatch");
+        
+        for (uint256 i = 0; i < remoteChainIds.length; i++) {
+            _setTrustedRemote(remoteChainIds[i], paths[i]);
+            emit TrustedRemoteSet(remoteChainIds[i], paths[i]);
+        }
     }
     
     /**
-     * @dev Get the accumulated bridge fees
-     * @return The accumulated bridge fees
+     * @dev Set the hub chain ID
+     * @param _hubChainId The new hub chain ID
      */
-    function accumulatedBridgeFees() external view returns (uint256) {
-        return _accumulatedBridgeFees;
+    function setHubChainId(uint16 _hubChainId) external onlyOwner {
+        require(_hubChainId != 0, "OmniGovernToken: Hub chain ID cannot be zero");
+        hubChainId = _hubChainId;
+        emit HubChainIdSet(_hubChainId);
     }
     
     /**
-     * @dev Withdraw accumulated bridge fees
-     * @param to The address to send the fees to
+     * @dev Cast a vote on a proposal
+     * @param proposalId The ID of the proposal
+     * @param support Whether to support the proposal
      */
-    function withdrawBridgeFees(address to) external override onlyOwner {
-        require(_accumulatedBridgeFees > 0, "OmniGovernToken: No fees to withdraw");
-        require(to != address(0), "OmniGovernToken: Cannot withdraw to zero address");
+    function vote(uint256 proposalId, bool support) external {
+        require(!hasVoted[proposalId][msg.sender], "OmniGovernToken: Already voted");
         
-        uint256 amount = _accumulatedBridgeFees;
-        _accumulatedBridgeFees = 0;
+        // Record the vote locally
+        hasVoted[proposalId][msg.sender] = true;
         
-        _transfer(address(this), to, amount);
+        // Calculate voting power based on token balance
+        uint256 votingPower = getVotes(msg.sender);
+        require(votingPower > 0, "OmniGovernToken: No voting power");
         
-        emit BridgeFeesWithdrawn(to, amount);
+        // If we're not on the hub chain, send the vote to the hub
+        if (block.chainid != hubChainId) {
+            bytes memory payload = abi.encode(
+                LZ_MESSAGE_TYPE_VOTE,
+                proposalId,
+                support,
+                msg.sender,
+                votingPower
+            );
+            
+            // Estimate fee
+            (uint256 fee, ) = lzEndpoint.estimateFees(
+                hubChainId,
+                address(this),
+                payload,
+                false,
+                bytes("")
+            );
+            
+            require(msg.value >= fee, "OmniGovernToken: Insufficient fee for cross-chain vote");
+            
+            // Send vote to hub chain
+            lzEndpoint.send{value: msg.value}(
+                hubChainId,
+                abi.encodePacked(address(this)),
+                payload,
+                payable(msg.sender),
+                address(0),
+                bytes("")
+            );
+        } else {
+            // If we're on the hub chain, record the vote directly
+            if (support) {
+                proposalVotes[proposalId] += votingPower;
+            }
+        }
+        
+        emit VoteCast(proposalId, msg.sender, support, votingPower);
     }
     
     /**
-     * @dev Override this function to circumvent the OFT standard's fee mechanism
-     * since we implement our own fee system
+     * @dev Handle vote message from another chain (only on hub chain)
+     * @param srcChainId Source chain ID
+     * @param proposalId Proposal ID
+     * @param support Whether the vote supports the proposal
+     * @param voter The address of the voter
+     * @param votingPower The voting power
      */
-    function _debitFrom(
-        address from, 
-        uint16, 
-        bytes memory, 
-        uint256 amount
-    ) internal override returns (uint256) {
-        require(from == _msgSender(), "OmniGovernToken: Sender must be the from address");
+    function _handleVoteMessage(
+        uint16 srcChainId,
+        uint256 proposalId,
+        bool support,
+        address voter,
+        uint256 votingPower
+    ) internal {
+        // Only the hub chain should process votes
+        require(block.chainid == hubChainId, "OmniGovernToken: Not hub chain");
         
-        // Burn tokens from the sender directly
-        _burn(from, amount);
+        // Record the vote
+        if (support) {
+            proposalVotes[proposalId] += votingPower;
+        }
         
-        // Return the amount after token-level fee (0 for now)
-        return amount;
+        emit CrossChainVoteReceived(srcChainId, proposalId, voter, support, votingPower);
     }
     
     /**
-     * @dev Override this function to handle the received tokens on the destination chain
-     */
-    function _creditTo(
-        uint16, 
-        address toAddress, 
-        uint256 amount
-    ) internal override returns (uint256) {
-        // Mint tokens to the recipient
-        _mint(toAddress, amount);
-        
-        // Return the amount received
-        return amount;
-    }
-    
-    /**
-     * @dev Called by the OFT protocol to handle an incoming packet
+     * @dev Override the _nonblockingLzReceive to handle different message types
      */
     function _nonblockingLzReceive(
         uint16 srcChainId,
@@ -219,76 +230,54 @@ contract OmniGovernToken is IOmniGovernToken, OFT, ERC20Votes, Ownable {
         uint64 nonce,
         bytes memory payload
     ) internal override {
-        // Let OFT handle the token transfer
-        super._nonblockingLzReceive(srcChainId, srcAddress, nonce, payload);
-    }
-    
-    /**
-     * @dev Override ERC20's _mint to track total minted
-     */
-    function _mint(address account, uint256 amount) internal override {
-        super._mint(account, amount);
-        
-        // Track minted amount for supply consistency
-        _totalMinted += amount;
-    }
-    
-    /**
-     * @dev Override ERC20's _burn to track total burned
-     */
-    function _burn(address account, uint256 amount) internal override {
-        super._burn(account, amount);
-        
-        // Track burned amount for supply consistency
-        _totalBurned += amount;
-    }
-    
-    /**
-     * @dev Get supply consistency stats
-     * This function is used by the SupplyConsistencyChecker to audit token supply
-     */
-    function getSupplyConsistencyData() external view returns (uint256 totalSupply, uint256 totalMinted, uint256 totalBurned) {
-        return (totalSupply(), _totalMinted, _totalBurned);
-    }
-    
-    /**
-     * @dev Check if supply is consistent
-     * totalSupply should equal _totalMinted - _totalBurned
-     */
-    function checkSupplyConsistency() external view returns (bool isConsistent, uint256 expectedSupply, uint256 actualSupply) {
-        expectedSupply = _totalMinted - _totalBurned;
-        actualSupply = totalSupply();
-        isConsistent = (expectedSupply == actualSupply);
-        return (isConsistent, expectedSupply, actualSupply);
-    }
-    
-    /**
-     * @dev Reconcile supply if a mismatch is detected (only callable by supply checker)
-     */
-    function reconcileSupply(uint256 expectedSupply) external returns (bool) {
-        require(msg.sender == supplyChecker, "OmniGovernToken: Only supply checker can reconcile");
-        
-        uint256 currentSupply = totalSupply();
-        
-        if (currentSupply < expectedSupply) {
-            // Need to mint tokens to reconcile
-            _mint(address(this), expectedSupply - currentSupply);
-            emit SupplyReconciled(currentSupply, expectedSupply, true);
-            return true;
-        } else if (currentSupply > expectedSupply) {
-            // Need to burn tokens to reconcile
-            _burn(address(this), currentSupply - expectedSupply);
-            emit SupplyReconciled(currentSupply, expectedSupply, false);
-            return true;
+        // Decode the message type
+        if (payload.length < 1) {
+            revert("OmniGovernToken: Invalid payload");
         }
         
-        return false; // No reconciliation needed
+        uint8 messageType;
+        assembly {
+            messageType := mload(add(payload, 1))
+        }
+        
+        if (messageType == LZ_MESSAGE_TYPE_TRANSFER) {
+            // Handle standard OFT transfer
+            super._nonblockingLzReceive(srcChainId, srcAddress, nonce, payload);
+        } else if (messageType == LZ_MESSAGE_TYPE_VOTE) {
+            // Handle vote message
+            (uint8 _, uint256 proposalId, bool support, address voter, uint256 votingPower) = 
+                abi.decode(payload, (uint8, uint256, bool, address, uint256));
+                
+            _handleVoteMessage(srcChainId, proposalId, support, voter, votingPower);
+        } else if (messageType == LZ_MESSAGE_TYPE_EXECUTE) {
+            // Handle execution message (to be implemented when we add the execution layer)
+            revert("OmniGovernToken: Execution not implemented yet");
+        } else {
+            revert("OmniGovernToken: Unknown message type");
+        }
+    }
+    
+    /**
+     * @dev Get the voting power for an account
+     * @param account The account to get voting power for
+     * @return The voting power
+     */
+    function getVotingPower(address account) external view returns (uint256) {
+        return getVotes(account);
+    }
+    
+    /**
+     * @dev Delegate voting power to another address
+     * @param delegatee The address to delegate to
+     */
+    function delegateVotingPower(address delegatee) external {
+        _delegate(msg.sender, delegatee);
     }
     
     // Events
-    event TokensSent(address indexed from, uint16 indexed dstChainId, bytes32 indexed to, uint256 amount, uint256 fee, uint256 amountAfterFee);
-    event BridgeFeeRateChanged(uint256 oldRate, uint256 newRate);
-    event BridgeFeesWithdrawn(address indexed to, uint256 amount);
-    event SupplyCheckerSet(address indexed supplyChecker);
-    event SupplyReconciled(uint256 fromSupply, uint256 toSupply, bool isMint);
+    event TokensSent(address indexed from, uint16 indexed dstChainId, bytes32 indexed to, uint256 amount);
+    event TrustedRemoteSet(uint16 indexed chainId, bytes path);
+    event HubChainIdSet(uint16 hubChainId);
+    event VoteCast(uint256 indexed proposalId, address indexed voter, bool support, uint256 votingPower);
+    event CrossChainVoteReceived(uint16 indexed srcChainId, uint256 indexed proposalId, address indexed voter, bool support, uint256 votingPower);
 }

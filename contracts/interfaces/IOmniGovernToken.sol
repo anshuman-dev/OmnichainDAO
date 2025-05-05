@@ -7,13 +7,6 @@ pragma solidity ^0.8.20;
  */
 interface IOmniGovernToken {
     /**
-     * @dev Get the bridge fee for a specific amount
-     * @param amount The amount being bridged
-     * @return The fee amount
-     */
-    function getBridgeFee(uint256 amount) external view returns (uint256);
-    
-    /**
      * @dev Send tokens to another chain
      * @param dstChainId The destination chain ID
      * @param to The recipient address
@@ -39,49 +32,28 @@ interface IOmniGovernToken {
     function setTrustedRemote(uint16 remoteChainId, bytes calldata path) external;
     
     /**
-     * @dev Set the bridge fee rate
-     * @param newBridgeFeeRate The new bridge fee rate
+     * @dev Cast a vote on a proposal
+     * @param proposalId The ID of the proposal
+     * @param support Whether to support the proposal
      */
-    function setBridgeFeeRate(uint256 newBridgeFeeRate) external;
+    function vote(uint256 proposalId, bool support) external;
     
     /**
-     * @dev Get the current bridge fee rate
-     * @return The current bridge fee rate
+     * @dev Get the voting power for an account
+     * @param account The account to get voting power for
+     * @return The voting power
      */
-    function bridgeFeeRate() external view returns (uint256);
+    function getVotingPower(address account) external view returns (uint256);
     
     /**
-     * @dev Withdraw accumulated bridge fees
-     * @param to The address to send the fees to
+     * @dev Delegate voting power to another address
+     * @param delegatee The address to delegate to
      */
-    function withdrawBridgeFees(address to) external;
+    function delegateVotingPower(address delegatee) external;
     
     /**
-     * @dev Set the supply consistency checker address
-     * @param _supplyChecker The address of the supply checker contract
+     * @dev Set the hub chain ID
+     * @param hubChainId The new hub chain ID
      */
-    function setSupplyChecker(address _supplyChecker) external;
-    
-    /**
-     * @dev Get supply consistency stats
-     * @return totalSupply Current total supply
-     * @return totalMinted Total amount minted
-     * @return totalBurned Total amount burned
-     */
-    function getSupplyConsistencyData() external view returns (uint256 totalSupply, uint256 totalMinted, uint256 totalBurned);
-    
-    /**
-     * @dev Check if supply is consistent
-     * @return isConsistent Whether supply is consistent
-     * @return expectedSupply Expected supply based on mint/burn tracking
-     * @return actualSupply Actual supply reported by the token
-     */
-    function checkSupplyConsistency() external view returns (bool isConsistent, uint256 expectedSupply, uint256 actualSupply);
-    
-    /**
-     * @dev Reconcile supply if a mismatch is detected (only callable by supply checker)
-     * @param expectedSupply The expected supply to reconcile to
-     * @return success Whether reconciliation was successful
-     */
-    function reconcileSupply(uint256 expectedSupply) external returns (bool);
+    function setHubChainId(uint16 hubChainId) external;
 }
