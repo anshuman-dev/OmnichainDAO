@@ -12,6 +12,7 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { useToast } from '@/hooks/use-toast';
 import ChainSelector from '@/components/ChainSelector';
 import NetworkStatus from '@/components/NetworkStatus';
+import NetworkHelperDialog from '@/components/NetworkHelperDialog';
 import { AVAILABLE_NETWORKS } from '@/lib/constants';
 import { LucideGitCompare, LucideShieldCheck, LucideVote, LucideZap } from 'lucide-react';
 
@@ -106,7 +107,30 @@ export default function OmniGovernDAO() {
           {!isConnected ? (
             <Button onClick={openWalletModal}>Connect Wallet</Button>
           ) : (
-            <Button variant="outline" onClick={openWalletModal}>Wallet Connected</Button>
+            <div className="flex gap-2">
+              <NetworkHelperDialog>
+                <Button size="sm" variant="secondary">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="mr-2"
+                  >
+                    <path
+                      d="M8 4V12M4 8H12"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Add Networks
+                </Button>
+              </NetworkHelperDialog>
+              <Button variant="outline" onClick={openWalletModal}>Wallet Connected</Button>
+            </div>
           )}
         </div>
       </div>
