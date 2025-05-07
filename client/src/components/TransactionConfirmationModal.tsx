@@ -1,28 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import React from 'react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { CheckCircle2, XCircle, ArrowBigRight, AlertTriangle } from 'lucide-react';
-import { ethers } from 'ethers';
-import { useWalletContext } from './WalletProvider';
-import { formatEther } from 'ethers/lib/utils';
+import { AlertCircle, ArrowRight, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
-export type TransactionStatus = 'pending' | 'source_confirmed' | 'destination_confirmed' | 'complete' | 'failed';
-
-type StepStatus = 'waiting' | 'in_progress' | 'complete' | 'failed';
-
-interface TransactionSteps {
-  sourceTransaction: StepStatus;
-  layerZeroMessage: StepStatus;
-  destinationTransaction: StepStatus;
-}
+export type TransactionStatus = 
+  | 'pending' 
+  | 'source_confirmed' 
+  | 'destination_confirmed' 
+  | 'completed' 
+  | 'failed';
 
 interface TransactionConfirmationModalProps {
   isOpen: boolean;
@@ -33,10 +21,9 @@ interface TransactionConfirmationModalProps {
   destinationChain?: string;
   txHash?: string;
   status: TransactionStatus;
-  onRetry?: () => void;
   estimatedFee?: string;
-  estimatedGas?: string;
   error?: Error | null;
+  onRetry?: () => void;
 }
 
 export default function TransactionConfirmationModal({
@@ -48,202 +35,126 @@ export default function TransactionConfirmationModal({
   destinationChain,
   txHash,
   status,
-  onRetry,
   estimatedFee,
-  estimatedGas,
-  error
+  error,
+  onRetry
 }: TransactionConfirmationModalProps) {
-  const { provider } = useWalletContext();
-  const [currentGasPrice, setCurrentGasPrice] = useState<string | null>(null);
-  const [steps, setSteps] = useState<TransactionSteps>({
-    sourceTransaction: 'waiting',
-    layerZeroMessage: 'waiting',
-    destinationTransaction: 'waiting',
-  });
-
-  // Initialize the transaction steps based on the status
-  useEffect(() => {
-    if (status === 'pending') {
-      setSteps({
-        sourceTransaction: 'in_progress',
-        layerZeroMessage: 'waiting',
-        destinationTransaction: 'waiting',
-      });
-    } else if (status === 'source_confirmed') {
-      setSteps({
-        sourceTransaction: 'complete',
-        layerZeroMessage: 'in_progress',
-        destinationTransaction: 'waiting',
-      });
-    } else if (status === 'destination_confirmed') {
-      setSteps({
-        sourceTransaction: 'complete',
-        layerZeroMessage: 'complete',
-        destinationTransaction: 'in_progress',
-      });
-    } else if (status === 'complete') {
-      setSteps({
-        sourceTransaction: 'complete',
-        layerZeroMessage: 'complete',
-        destinationTransaction: 'complete',
-      });
-    } else if (status === 'failed') {
-      // Determine which step failed based on the error (simplified logic)
-      const failedStep = error?.message?.includes('LayerZero') 
-        ? 'layerZeroMessage' 
-        : error?.message?.includes('destination') 
-          ? 'destinationTransaction' 
-          : 'sourceTransaction';
-
-      setSteps({
-        sourceTransaction: failedStep === 'sourceTransaction' ? 'failed' : 'complete',
-        layerZeroMessage: failedStep === 'layerZeroMessage' ? 'failed' : 
-          (failedStep === 'sourceTransaction' ? 'waiting' : 'complete'),
-        destinationTransaction: failedStep === 'destinationTransaction' ? 'failed' : 'waiting',
-      });
-    }
-  }, [status, error]);
-
-  // Get current gas price from provider
-  useEffect(() => {
-    async function fetchGasPrice() {
-      if (provider) {
-        try {
-          const gasPrice = await provider.getGasPrice();
-          setCurrentGasPrice(formatEther(gasPrice));
-        } catch (err) {
-          console.error("Error fetching gas price:", err);
-        }
-      }
-    }
-
-    if (isOpen) {
-      fetchGasPrice();
-    }
-  }, [provider, isOpen]);
-
-  // Status components for each step
-  const renderStepStatus = (step: StepStatus) => {
-    switch (step) {
-      case 'waiting':
-        return <div className="w-6 h-6 rounded-full bg-gray-200"></div>;
-      case 'in_progress':
-        return <Spinner size="sm" color="accent" />;
-      case 'complete':
-        return <CheckCircle2 className="w-6 h-6 text-green-500" />;
+  
+  const renderStatusIcon = () => {
+    switch (status) {
+      case 'pending':
+        return <Spinner size="lg" className="text-blue-400" />;
+      case 'source_confirmed':
+        return <Loader2 className="h-12 w-12 text-yellow-400 animate-spin" />;
+      case 'destination_confirmed':
+        return <Loader2 className="h-12 w-12 text-green-400 animate-spin" />;
+      case 'completed':
+        return <CheckCircle2 className="h-12 w-12 text-green-500" />;
       case 'failed':
-        return <XCircle className="w-6 h-6 text-red-500" />;
+        return <AlertCircle className="h-12 w-12 text-red-500" />;
+      default:
+        return <Spinner size="lg" />;
     }
   };
-
+  
+  const getStatusText = () => {
+    switch (status) {
+      case 'pending':
+        return "Transaction is being processed";
+      case 'source_confirmed':
+        return "Confirmed on source chain, waiting for destination chain";
+      case 'destination_confirmed':
+        return "Confirmed on destination chain, finalizing";
+      case 'completed':
+        return "Transaction completed successfully";
+      case 'failed':
+        return "Transaction failed";
+      default:
+        return "Processing transaction";
+    }
+  };
+  
+  const getStatusBadgeColor = () => {
+    switch (status) {
+      case 'pending':
+        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+      case 'source_confirmed':
+        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
+      case 'destination_confirmed':
+        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
+      case 'completed':
+        return "bg-green-500/10 text-green-500 border-green-500/20";
+      case 'failed':
+        return "bg-red-500/10 text-red-500 border-red-500/20";
+      default:
+        return "bg-gray-500/10 text-gray-500 border-gray-500/20";
+    }
+  };
+  
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogDescription>
+            {description}
+          </DialogDescription>
         </DialogHeader>
-
-        <div className="py-4">
-          {/* Transaction Steps Display */}
-          <div className="flex flex-col gap-4">
-            {/* Source Chain Transaction */}
-            <div className="flex items-center gap-3">
-              {renderStepStatus(steps.sourceTransaction)}
-              <div className="flex-1">
-                <p className="font-medium">Source Chain Transaction</p>
-                <p className="text-sm text-gray-500">{sourceChain}</p>
-                {txHash && steps.sourceTransaction !== 'waiting' && (
-                  <p className="text-xs text-blue-600">
-                    Tx: {txHash.substring(0, 8)}...{txHash.substring(txHash.length - 8)}
-                  </p>
-                )}
-              </div>
+        
+        <div className="flex flex-col items-center justify-center py-4 space-y-4">
+          {renderStatusIcon()}
+          
+          <div className="text-center">
+            <div className={`px-3 py-1 rounded-full text-sm inline-flex items-center border ${getStatusBadgeColor()}`}>
+              {getStatusText()}
             </div>
-
-            {/* Connecting arrow */}
-            <div className="flex justify-center">
-              <ArrowBigRight className="text-gray-400" />
-            </div>
-
-            {/* LayerZero Message */}
-            <div className="flex items-center gap-3">
-              {renderStepStatus(steps.layerZeroMessage)}
-              <div className="flex-1">
-                <p className="font-medium">LayerZero Message Delivery</p>
-                <p className="text-sm text-gray-500">Cross-chain message in transit</p>
-                {steps.layerZeroMessage === 'in_progress' && (
-                  <p className="text-xs text-blue-600">This may take a few minutes</p>
-                )}
-              </div>
-            </div>
-
-            {/* Connecting arrow - only show if there's a destination chain */}
-            {destinationChain && (
-              <div className="flex justify-center">
-                <ArrowBigRight className="text-gray-400" />
-              </div>
-            )}
-
-            {/* Destination Chain Transaction - only show if there's a destination chain */}
-            {destinationChain && (
-              <div className="flex items-center gap-3">
-                {renderStepStatus(steps.destinationTransaction)}
-                <div className="flex-1">
-                  <p className="font-medium">Destination Chain Transaction</p>
-                  <p className="text-sm text-gray-500">{destinationChain}</p>
-                </div>
-              </div>
-            )}
           </div>
-
-          {/* Fee & Gas Estimates */}
-          {(estimatedFee || estimatedGas || currentGasPrice) && (
-            <div className="mt-6 p-3 rounded bg-gray-50">
-              <p className="text-sm font-medium mb-2">Transaction Details</p>
-              {estimatedFee && (
-                <div className="flex justify-between text-sm">
-                  <span>LayerZero Fee:</span>
-                  <span>{estimatedFee} ETH</span>
-                </div>
-              )}
-              {estimatedGas && (
-                <div className="flex justify-between text-sm">
-                  <span>Estimated Gas:</span>
-                  <span>{estimatedGas} ETH</span>
-                </div>
-              )}
-              {currentGasPrice && (
-                <div className="flex justify-between text-sm">
-                  <span>Current Gas Price:</span>
-                  <span>{parseFloat(currentGasPrice).toFixed(9)} ETH</span>
-                </div>
-              )}
+          
+          {txHash && (
+            <div className="text-xs text-gray-500 flex items-center">
+              TX: {txHash.substring(0, 8)}...{txHash.substring(txHash.length - 6)}
+              <a 
+                href={`https://layerzeroscan.com/tx/${txHash}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="ml-1 inline-flex items-center text-blue-500 hover:text-blue-700"
+              >
+                <ExternalLink size={12} />
+              </a>
             </div>
           )}
-
-          {/* Error Display */}
-          {error && status === 'failed' && (
-            <div className="mt-4 p-3 rounded bg-red-50 border border-red-100">
-              <div className="flex gap-2">
-                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-red-800">Transaction Failed</p>
-                  <p className="text-xs text-red-700">{error.message}</p>
-                </div>
-              </div>
+          
+          {estimatedFee && (
+            <div className="text-sm text-gray-400">
+              Estimated fee: {estimatedFee} ETH
+            </div>
+          )}
+          
+          <div className="flex items-center space-x-2 text-sm">
+            <Badge variant="outline">{sourceChain}</Badge>
+            {destinationChain && (
+              <>
+                <ArrowRight size={14} className="text-gray-400" />
+                <Badge variant="outline">{destinationChain}</Badge>
+              </>
+            )}
+          </div>
+          
+          {error && (
+            <div className="text-red-500 text-sm mt-2 text-center">
+              {error.message}
             </div>
           )}
         </div>
-
-        <DialogFooter className="flex flex-row justify-between">
+        
+        <DialogFooter className="flex flex-col sm:flex-row sm:justify-between">
           {status === 'failed' && onRetry ? (
-            <Button variant="destructive" onClick={onRetry}>
+            <Button onClick={onRetry} variant="default">
               Retry Transaction
             </Button>
           ) : (
-            <Button variant={status === 'complete' ? 'default' : 'outline'} onClick={onClose}>
-              {status === 'complete' ? 'Done' : 'Close'}
+            <Button onClick={onClose} variant={status === 'completed' ? "default" : "outline"}>
+              {status === 'completed' ? 'Done' : 'Close'}
             </Button>
           )}
         </DialogFooter>

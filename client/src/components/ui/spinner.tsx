@@ -1,40 +1,25 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
-interface SpinnerProps extends React.HTMLAttributes<HTMLDivElement> {
+interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg';
-  color?: 'default' | 'primary' | 'secondary' | 'accent';
+  className?: string;
 }
 
-export function Spinner({
-  size = 'md',
-  color = 'default',
-  className,
-  ...props
-}: SpinnerProps) {
-  // Size mapping
-  const sizeMap = {
-    sm: 'h-4 w-4',
-    md: 'h-6 w-6',
-    lg: 'h-8 w-8',
-  };
-
-  // Color mapping
-  const colorMap = {
-    default: 'text-gray-400',
-    primary: 'text-primary',
-    secondary: 'text-secondary',
-    accent: 'text-blue-500',
+export function Spinner({ size = 'md', className = '' }: SpinnerProps) {
+  const getSizeClass = () => {
+    switch (size) {
+      case 'sm':
+        return 'h-4 w-4';
+      case 'lg':
+        return 'h-8 w-8';
+      case 'md':
+      default:
+        return 'h-6 w-6';
+    }
   };
 
   return (
-    <div 
-      role="status" 
-      className={cn("animate-spin", className)} 
-      {...props}
-    >
-      <Loader2 className={cn(sizeMap[size], colorMap[color])} />
+    <div className={`inline-block animate-spin rounded-full border-2 border-solid border-current border-r-transparent ${getSizeClass()} ${className}`} role="status">
       <span className="sr-only">Loading...</span>
     </div>
   );

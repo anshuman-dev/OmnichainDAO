@@ -1,154 +1,136 @@
-import { useState, useCallback } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { useToast } from '@/hooks/use-toast';
 import { useWalletContext } from '@/components/WalletProvider';
-import { InsertLayerZeroTransaction, LayerZeroTransaction } from '@shared/schema';
+import { LayerZeroTransaction, CreateTransactionInput } from '@/types/transaction';
 
 interface UseLayerZeroTransactionProps {
-  onSuccess?: (transaction: LayerZeroTransaction) => void;
+  onSuccess?: (tx: LayerZeroTransaction) => void;
   onError?: (error: Error) => void;
+  pollInterval?: number;
 }
 
-export default function useLayerZeroTransaction({ 
-  onSuccess, 
-  onError 
+/**
+ * Hook for managing LayerZero transactions, including creation, monitoring and error handling
+ */
+export default function useLayerZeroTransaction({
+  onSuccess,
+  onError,
+  pollInterval = 5000,
 }: UseLayerZeroTransactionProps = {}) {
-  const { toast } = useToast();
-  const { address } = useWalletContext();
-  const queryClient = useQueryClient();
+  const { address, isConnected } = useWalletContext();
   const [currentTransaction, setCurrentTransaction] = useState<LayerZeroTransaction | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
-  // Create transaction mutation
-  const { mutate: createTransaction, isPending: isCreating } = useMutation({
-    mutationFn: (data: Omit<InsertLayerZeroTransaction, 'walletAddress'>) => {
-      if (!address) {
-        throw new Error('Wallet not connected');
-      }
+  // Mutation for creating a new transaction
+  const createMutation = useMutation({
+    mutationFn: async (transaction: CreateTransactionInput) => {
+      const enrichedTransaction = {
+        ...transaction,
+        walletAddress: transaction.walletAddress || address || '0x',
+      };
       
-      return apiRequest<LayerZeroTransaction>('/api/layerzero/transaction', {
+      const response = await apiRequest('/api/layerzero/transactions', {
         method: 'POST',
-        body: JSON.stringify({
-          ...data,
-          walletAddress: address
-        }),
+        body: JSON.stringify(enrichedTransaction),
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       });
+      
+      return response;
     },
     onSuccess: (data) => {
-      setCurrentTransaction(data);
+      setCurrentTransaction(data as LayerZeroTransaction);
       setError(null);
-      
-      toast({
-        title: "Transaction Created",
-        description: `Your ${data.type} transaction has been created and is being processed.`,
-      });
-      
-      // Invalidate the transactions query to refresh the list
-      queryClient.invalidateQueries({ queryKey: ['/api/layerzero/transactions', address] });
-      
-      if (onSuccess) {
-        onSuccess(data);
-      }
+      setIsPolling(true);
+      setRetryCount(0);
     },
     onError: (err: Error) => {
       setError(err);
-      
-      toast({
-        title: "Transaction Failed",
-        description: err.message,
-        variant: "destructive",
-      });
-      
-      if (onError) {
-        onError(err);
-      }
-    }
+      if (onError) onError(err);
+    },
   });
 
-  // Track transaction status by ID
-  const { mutate: trackTransaction, isPending: isTracking } = useMutation({
-    mutationFn: async (id: number) => {
-      const transaction = await apiRequest<LayerZeroTransaction>(`/api/layerzero/transaction/${id}`);
-      return transaction;
-    },
-    onSuccess: (data) => {
-      setCurrentTransaction(data);
+  // Query for getting a transaction by ID
+  const { data, refetch } = useQuery({
+    queryKey: ['transaction', currentTransaction?.id],
+    queryFn: () => 
+      apiRequest(`/api/layerzero/transactions/${currentTransaction?.id}`),
+    enabled: !!currentTransaction && isPolling,
+    refetchInterval: isPolling ? pollInterval : false,
+  });
+
+  // Update the transaction state when data changes
+  useEffect(() => {
+    if (data && currentTransaction?.id == data.id) {
+      setCurrentTransaction(data as LayerZeroTransaction);
       
-      // If status changed to completed or failed, notify the user
+      // Check for completion or failure
       if (data.status === 'completed') {
-        toast({
-          title: "Transaction Completed",
-          description: `Your ${data.type} operation has been confirmed on all chains.`,
-        });
+        setIsPolling(false);
+        if (onSuccess) onSuccess(data as LayerZeroTransaction);
       } else if (data.status === 'failed') {
-        const errorMsg = data.error || 'Transaction failed for unknown reasons';
-        setError(new Error(errorMsg));
-        
-        toast({
-          title: "Transaction Failed",
-          description: errorMsg,
-          variant: "destructive",
-        });
+        setIsPolling(false);
+        if (data.error) {
+          setError(new Error(data.error));
+          if (onError) onError(new Error(data.error));
+        }
       }
-    },
-    onError: (err: Error) => {
-      setError(err);
     }
-  });
+  }, [data, onSuccess, onError, currentTransaction?.id]);
 
-  // Clear current transaction and error
-  const clearTransaction = useCallback(() => {
-    setCurrentTransaction(null);
-    setError(null);
-  }, []);
+  // Create a new transaction
+  const createTransaction = useCallback((tx: CreateTransactionInput) => {
+    createMutation.mutate(tx);
+  }, [createMutation]);
 
   // Retry a failed transaction
   const retryTransaction = useCallback(() => {
-    if (currentTransaction?.id) {
-      // Call the API to update the transaction status to 'pending'
-      apiRequest(`/api/layerzero/transaction/${currentTransaction.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status: 'pending' }),
+    if (currentTransaction) {
+      setRetryCount(count => count + 1);
+      setIsPolling(true);
+      
+      // If we have a sourceChain and sourceTxHash, we can create a new retry transaction
+      apiRequest('/api/layerzero/transactions/retry', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          id: currentTransaction.id,
+          sourceTxHash: currentTransaction.sourceTxHash,
+          sourceChain: currentTransaction.sourceChain
+        }),
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       })
-        .then(() => {
-          // Invalidate the transactions query to refresh the list
-          queryClient.invalidateQueries({ queryKey: ['/api/layerzero/transactions', address] });
-          queryClient.invalidateQueries({ queryKey: [`/api/layerzero/transaction/${currentTransaction.id}`] });
-          
-          // Clear error
-          setError(null);
-          
-          toast({
-            title: "Transaction Retried",
-            description: "Your transaction has been submitted again for processing.",
-          });
-        })
-        .catch((err) => {
-          setError(err);
-          
-          toast({
-            title: "Retry Failed",
-            description: err.message,
-            variant: "destructive",
-          });
-        });
+      .then((response) => {
+        setCurrentTransaction(response as LayerZeroTransaction);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err);
+        setIsPolling(false);
+      });
     }
-  }, [currentTransaction, queryClient, address, toast]);
+  }, [currentTransaction]);
+
+  // Clear the current transaction and error state
+  const clearTransaction = useCallback(() => {
+    setCurrentTransaction(null);
+    setError(null);
+    setIsPolling(false);
+    setRetryCount(0);
+  }, []);
 
   return {
     createTransaction,
-    trackTransaction,
-    clearTransaction,
-    retryTransaction,
     currentTransaction,
+    isLoading: createMutation.isPending || isPolling,
     error,
-    isLoading: isCreating || isTracking
+    retryCount,
+    retryTransaction,
+    clearTransaction
   };
 }

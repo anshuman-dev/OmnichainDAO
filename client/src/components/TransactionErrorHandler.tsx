@@ -1,242 +1,113 @@
-import React, { useState, useEffect } from 'react';
-import { AlertTriangle, RefreshCw, Network, CheckCircle } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
-import { useWalletContext } from './WalletProvider';
-import contractService from '@/services/contractService';
-import { Network as NetworkType } from '@/types/network';
+import React from 'react';
+import { AlertTriangle, RefreshCw, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Network } from '@/types/network';
 
-// Types of errors we can handle
 export enum ErrorType {
-  WALLET_CONNECTION = 'wallet_connection',
-  NETWORK_MISMATCH = 'network_mismatch',
   TRANSACTION_FAILED = 'transaction_failed',
-  LAYERZERO_MESSAGE_FAILED = 'layerzero_message_failed',
-  INSUFFICIENT_FUNDS = 'insufficient_funds',
+  NETWORK_MISMATCH = 'network_mismatch',
+  GAS_ESTIMATION_FAILED = 'gas_estimation_failed',
+  WALLET_CONNECTION = 'wallet_connection',
   CONTRACT_INTERACTION = 'contract_interaction',
+  UNKNOWN = 'unknown'
 }
 
 interface TransactionErrorHandlerProps {
-  error: Error | null;
+  error: Error;
   errorType?: ErrorType;
-  targetNetwork?: NetworkType;
+  targetNetwork?: Network;
   txHash?: string;
   onRetry?: () => void;
+  onSwitchNetwork?: () => void;
   onClear?: () => void;
 }
 
 export default function TransactionErrorHandler({
   error,
-  errorType = ErrorType.CONTRACT_INTERACTION,
+  errorType = ErrorType.UNKNOWN,
   targetNetwork,
   txHash,
   onRetry,
+  onSwitchNetwork,
   onClear
 }: TransactionErrorHandlerProps) {
-  const { toast } = useToast();
-  const { connectWallet, switchNetwork } = useWalletContext();
-  const [isAttemptingFix, setIsAttemptingFix] = useState(false);
-  const [isFixed, setIsFixed] = useState(false);
-
-  // Clear state when error changes
-  useEffect(() => {
-    setIsAttemptingFix(false);
-    setIsFixed(false);
-  }, [error, errorType]);
-
-  if (!error) return null;
-
-  const handleFixError = async () => {
-    setIsAttemptingFix(true);
-
-    try {
-      switch (errorType) {
-        case ErrorType.WALLET_CONNECTION:
-          await connectWallet();
-          break;
-        
-        case ErrorType.NETWORK_MISMATCH:
-          if (targetNetwork) {
-            await switchNetwork(targetNetwork.chainId);
-          }
-          break;
-        
-        case ErrorType.INSUFFICIENT_FUNDS:
-          toast({
-            title: "Insufficient Funds",
-            description: "Please fund your wallet with testnet tokens to continue.",
-            variant: "destructive",
-          });
-          
-          // Open relevant testnet faucet in new tab
-          if (targetNetwork) {
-            if (targetNetwork.id === 'sepolia') {
-              window.open('https://sepoliafaucet.com/', '_blank');
-            } else if (targetNetwork.id === 'amoy') {
-              window.open('https://faucet.polygon.technology/amoy', '_blank');
-            }
-          }
-          break;
-        
-        case ErrorType.TRANSACTION_FAILED:
-          if (onRetry) {
-            onRetry();
-          }
-          break;
-        
-        case ErrorType.LAYERZERO_MESSAGE_FAILED:
-          toast({
-            title: "LayerZero Message Failed",
-            description: "The cross-chain message failed to deliver. You can retry the transaction.",
-            variant: "destructive",
-          });
-          
-          if (onRetry) {
-            onRetry();
-          }
-          break;
-        
-        default:
-          toast({
-            title: "Operation Failed",
-            description: "An unknown error occurred. Please try again.",
-            variant: "destructive",
-          });
-      }
-
-      setIsFixed(true);
-      
-      // Call onClear after successful fix
-      if (onClear) {
-        setTimeout(() => {
-          onClear();
-        }, 2000);
-      }
-    } catch (fixError) {
-      console.error("Error while attempting to fix:", fixError);
-      toast({
-        title: "Fix Failed",
-        description: "Could not automatically resolve the issue. Please try manually.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsAttemptingFix(false);
+  
+  const getErrorMessage = () => {
+    // Extract the core message from the error
+    const baseMessage = error.message;
+    
+    // Enhance the message based on error type
+    switch (errorType) {
+      case ErrorType.TRANSACTION_FAILED:
+        return `Transaction failed: ${baseMessage}`;
+      case ErrorType.NETWORK_MISMATCH:
+        return `Network mismatch: Please switch to ${targetNetwork?.name || 'the correct network'}`;
+      case ErrorType.GAS_ESTIMATION_FAILED:
+        return `Gas estimation failed: ${baseMessage}`;
+      case ErrorType.WALLET_CONNECTION:
+        return 'Wallet not connected. Please connect your wallet to continue.';
+      case ErrorType.CONTRACT_INTERACTION:
+        return `Contract interaction failed: ${baseMessage}`;
+      default:
+        return baseMessage || 'An unknown error occurred';
     }
   };
-
-  // Display loading state when attempting to fix
-  if (isAttemptingFix) {
-    return (
-      <Alert className="bg-yellow-50 border-yellow-200">
-        <RefreshCw className="h-4 w-4 animate-spin text-yellow-600" />
-        <AlertTitle>Working on it...</AlertTitle>
-        <AlertDescription>
-          Attempting to resolve the issue. Please wait.
-        </AlertDescription>
-      </Alert>
-    );
-  }
-
-  // Display success state when fix was successful
-  if (isFixed) {
-    return (
-      <Alert className="bg-green-50 border-green-200">
-        <CheckCircle className="h-4 w-4 text-green-600" />
-        <AlertTitle>Issue Resolved</AlertTitle>
-        <AlertDescription>
-          The problem has been fixed. You can continue.
-        </AlertDescription>
-      </Alert>
-    );
-  }
-
-  // Different error UI based on error type
-  switch (errorType) {
-    case ErrorType.WALLET_CONNECTION:
-      return (
-        <Alert className="bg-red-50 border-red-200">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
-          <AlertTitle>Wallet Connection Error</AlertTitle>
-          <AlertDescription className="flex flex-col gap-2">
-            <p>Your wallet is not connected. Please connect to continue.</p>
-            <Button size="sm" variant="outline" onClick={handleFixError}>
-              Connect Wallet
-            </Button>
-          </AlertDescription>
-        </Alert>
-      );
-
-    case ErrorType.NETWORK_MISMATCH:
-      return (
-        <Alert className="bg-red-50 border-red-200">
-          <Network className="h-4 w-4 text-red-600" />
-          <AlertTitle>Network Mismatch</AlertTitle>
-          <AlertDescription className="flex flex-col gap-2">
-            <p>
-              {targetNetwork 
-                ? `Please switch to ${targetNetwork.name} to continue.` 
-                : "You're on the wrong network. Please switch to continue."}
-            </p>
-            {targetNetwork && (
-              <Button size="sm" variant="outline" onClick={handleFixError}>
-                Switch to {targetNetwork.name}
-              </Button>
-            )}
-          </AlertDescription>
-        </Alert>
-      );
-
-    case ErrorType.INSUFFICIENT_FUNDS:
-      return (
-        <Alert className="bg-red-50 border-red-200">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
-          <AlertTitle>Insufficient Funds</AlertTitle>
-          <AlertDescription className="flex flex-col gap-2">
-            <p>You don't have enough funds to complete this transaction.</p>
-            <Button size="sm" variant="outline" onClick={handleFixError}>
-              Visit Testnet Faucet
-            </Button>
-          </AlertDescription>
-        </Alert>
-      );
-
-    case ErrorType.TRANSACTION_FAILED:
-    case ErrorType.LAYERZERO_MESSAGE_FAILED:
-      return (
-        <Alert className="bg-red-50 border-red-200">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
-          <AlertTitle>Transaction Failed</AlertTitle>
-          <AlertDescription className="flex flex-col gap-2">
-            <p>{error.message}</p>
-            {txHash && (
-              <p className="text-xs text-gray-600">
-                Transaction: {txHash.substring(0, 10)}...{txHash.substring(txHash.length - 10)}
-              </p>
-            )}
+  
+  const renderActionButtons = () => {
+    switch (errorType) {
+      case ErrorType.TRANSACTION_FAILED:
+        return (
+          <div className="flex space-x-2">
             {onRetry && (
-              <Button size="sm" variant="outline" onClick={handleFixError}>
-                Retry Transaction
+              <Button size="sm" variant="outline" onClick={onRetry} className="flex items-center">
+                <RefreshCw className="mr-1 h-3 w-3" /> Retry
               </Button>
             )}
-          </AlertDescription>
-        </Alert>
-      );
-
-    default:
-      return (
-        <Alert className="bg-red-50 border-red-200">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
-          <AlertTitle>Operation Failed</AlertTitle>
-          <AlertDescription className="flex flex-col gap-2">
-            <p>{error.message}</p>
-            {onRetry && (
-              <Button size="sm" variant="outline" onClick={handleFixError}>
-                Retry
+            {onClear && (
+              <Button size="sm" variant="ghost" onClick={onClear} className="flex items-center">
+                <X className="mr-1 h-3 w-3" /> Dismiss
               </Button>
             )}
-          </AlertDescription>
-        </Alert>
-      );
-  }
+          </div>
+        );
+      case ErrorType.NETWORK_MISMATCH:
+        return (
+          <div className="flex space-x-2">
+            {onSwitchNetwork && (
+              <Button size="sm" variant="default" onClick={onSwitchNetwork} className="flex items-center">
+                Switch to {targetNetwork?.name || 'correct network'}
+              </Button>
+            )}
+            {onClear && (
+              <Button size="sm" variant="ghost" onClick={onClear} className="flex items-center">
+                <X className="mr-1 h-3 w-3" /> Dismiss
+              </Button>
+            )}
+          </div>
+        );
+      default:
+        return onClear ? (
+          <Button size="sm" variant="ghost" onClick={onClear} className="flex items-center">
+            <X className="mr-1 h-3 w-3" /> Dismiss
+          </Button>
+        ) : null;
+    }
+  };
+  
+  return (
+    <Alert variant="destructive">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertTitle className="font-semibold">Error</AlertTitle>
+      <AlertDescription className="mt-2">
+        <div className="text-sm">{getErrorMessage()}</div>
+        {txHash && (
+          <div className="text-xs mt-1">
+            Transaction hash: {txHash.slice(0, 6)}...{txHash.slice(-4)}
+          </div>
+        )}
+        <div className="mt-3">{renderActionButtons()}</div>
+      </AlertDescription>
+    </Alert>
+  );
 }
