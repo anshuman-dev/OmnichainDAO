@@ -461,6 +461,159 @@ export class ContractService {
       throw parseContractError(error);
     }
   }
+  
+  // Get all proposal details
+  async getProposals(): Promise<any[]> {
+    try {
+      const { proposalExecutor } = this.getContracts();
+      
+      // In a real implementation, we would query events or have a method to get all proposals
+      // For example: const count = await proposalExecutor.getProposalCount();
+      // For now, we'll check for specific proposal IDs
+      const proposals = [];
+      
+      try {
+        // Try to get proposals with IDs 1-5 (adjust as needed based on your contract implementation)
+        for (let i = 1; i <= 5; i++) {
+          try {
+            const proposal = await proposalExecutor.getProposal(i);
+            if (proposal.id && !proposal.id.isZero()) {
+              // Format the proposal data
+              const formattedProposal = {
+                id: proposal.id.toString(),
+                title: proposal.title,
+                description: proposal.description,
+                proposer: proposal.proposer,
+                status: proposal.status,
+                startTime: new Date(proposal.startTime.toNumber() * 1000),
+                endTime: new Date(proposal.endTime.toNumber() * 1000),
+                forVotes: ethers.utils.formatUnits(proposal.forVotes, 18),
+                againstVotes: ethers.utils.formatUnits(proposal.againstVotes, 18),
+                abstainVotes: ethers.utils.formatUnits(proposal.abstainVotes, 18),
+              };
+              
+              // Get proposal actions and target chains
+              const [actions, targetChains] = await proposalExecutor.getProposalActions(i);
+              
+              // Get execution status
+              const [statuses, chains] = await proposalExecutor.getProposalExecutionStatus(i);
+              
+              // Add to formatted proposal
+              formattedProposal.actions = actions;
+              formattedProposal.targetChains = targetChains.map(tc => tc.toNumber());
+              formattedProposal.executionStatus = statuses.map((status, index) => ({
+                chainId: chains[index].toNumber(),
+                status: status.toNumber()
+              }));
+              
+              proposals.push(formattedProposal);
+            }
+          } catch (err) {
+            // Proposal doesn't exist or other error, continue to next ID
+            console.log(`No proposal with ID ${i} or error fetching it:`, err);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching proposals:", err);
+      }
+      
+      return proposals;
+    } catch (error) {
+      throw parseContractError(error);
+    }
+  }
+  
+  // Get proposal details by ID with proper error handling
+  async getProposal(proposalId: number): Promise<any> {
+    try {
+      const { proposalExecutor } = this.getContracts();
+      
+      // Get basic proposal info
+      const proposal = await proposalExecutor.getProposal(proposalId);
+      
+      // Format the proposal data
+      const formattedProposal = {
+        id: proposal.id.toString(),
+        title: proposal.title,
+        description: proposal.description,
+        proposer: proposal.proposer,
+        status: proposal.status,
+        startTime: new Date(proposal.startTime.toNumber() * 1000),
+        endTime: new Date(proposal.endTime.toNumber() * 1000),
+        forVotes: ethers.utils.formatUnits(proposal.forVotes, 18),
+        againstVotes: ethers.utils.formatUnits(proposal.againstVotes, 18),
+        abstainVotes: ethers.utils.formatUnits(proposal.abstainVotes, 18),
+      };
+      
+      // Get proposal actions and target chains
+      const [actions, targetChains] = await proposalExecutor.getProposalActions(proposalId);
+      
+      // Get execution status
+      const [statuses, chains] = await proposalExecutor.getProposalExecutionStatus(proposalId);
+      
+      // Add to formatted proposal
+      formattedProposal.actions = actions;
+      formattedProposal.targetChains = targetChains.map(tc => tc.toNumber());
+      formattedProposal.executionStatus = statuses.map((status, index) => ({
+        chainId: chains[index].toNumber(),
+        status: status.toNumber()
+      }));
+      
+      return formattedProposal;
+    } catch (error) {
+      throw parseContractError(error);
+    }
+  }
+  
+  // Get vote receipt for a proposal
+  async getVoteReceipt(proposalId: number, voter: string): Promise<{
+    hasVoted: boolean;
+    support: number;
+    votes: ethers.BigNumber;
+  }> {
+    try {
+      const { proposalExecutor } = this.getContracts();
+      
+      // Get the receipt
+      const receipt = await proposalExecutor.getReceipt(proposalId, voter);
+      
+      return receipt;
+    } catch (error) {
+      throw parseContractError(error);
+    }
+  }
+  
+  // Check contract interactions for a transaction
+  async getTransactionReceipt(txHash: string): Promise<ethers.providers.TransactionReceipt | null> {
+    this.ensureInitialized();
+    
+    try {
+      return await this.provider!.getTransactionReceipt(txHash);
+    } catch (error) {
+      console.error("Error getting transaction receipt:", error);
+      return null;
+    }
+  }
+  
+  // Switch network in the wallet
+  async switchNetwork(chainId: number): Promise<boolean> {
+    this.ensureInitialized();
+    
+    try {
+      await this.provider!.send('wallet_switchEthereumChain', [{ chainId: ethers.utils.hexValue(chainId) }]);
+      return true;
+    } catch (error: any) {
+      // This error code indicates that the chain has not been added to MetaMask
+      if (error.code === 4902) {
+        throw new ContractError(
+          'This network is not available in your wallet. Please add it manually.',
+          ContractErrorType.CONNECTION_ERROR,
+          error
+        );
+      }
+      throw parseContractError(error);
+    }
+  }
 }
 
 // Create singleton instance

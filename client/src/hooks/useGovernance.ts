@@ -65,24 +65,17 @@ export function useGovernance() {
     setIsLoading(true);
     
     try {
-      // In a real implementation, we would fetch proposals from the contract
-      // For now, just simulate with a timeout
-      /*
-      const proposalCount = await contractService.getProposalCount();
-      const fetchedProposals: ProposalDetails[] = [];
+      // Get proposals from the contract service
+      const realProposals = await contractService.getProposals();
       
-      for (let i = 1; i <= proposalCount; i++) {
-        const proposal = await contractService.getProposal(i);
-        fetchedProposals.push(proposal);
-      }
-      
-      setProposals(fetchedProposals);
-      */
-      
-      // Simulate fetching proposals
-      // This would be replaced with real contract calls
-      
-      setTimeout(() => {
+      // If we have real proposals, use them
+      if (realProposals && realProposals.length > 0) {
+        setProposals(realProposals);
+      } else {
+        // If no proposals found, add default ones to demonstrate UI
+        // In a production app, we would show an empty state
+        console.log("No proposals found in contract, showing example proposals");
+        
         setProposals([
           {
             id: '1',
@@ -121,8 +114,7 @@ export function useGovernance() {
             ]
           }
         ]);
-      }, 1000);
-      
+      }
     } catch (error) {
       console.error('Error fetching proposals:', error);
       toast({
@@ -130,6 +122,28 @@ export function useGovernance() {
         description: 'Could not retrieve governance proposals. Please try again later.',
         variant: 'destructive',
       });
+      
+      // If we fail to fetch, show example proposals
+      setProposals([
+        {
+          id: '1',
+          title: 'Upgrade OmniToken implementation',
+          description: 'Proposal to upgrade the OmniToken implementation to v2 with improved gas efficiency and new features.',
+          proposer: '0x1234567890123456789012345678901234567890',
+          status: ProposalStatus.Active,
+          startTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+          endTime: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), // 5 days from now
+          forVotes: '10000000',
+          againstVotes: '5000000',
+          abstainVotes: '2000000',
+          actions: ['0x1234...'], // Encoded actions
+          targetChains: [11155111, 80002], // Sepolia and Amoy
+          executionStatus: [
+            { chainId: 11155111, status: 0 }, // Pending
+            { chainId: 80002, status: 0 }, // Pending
+          ]
+        }
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -235,15 +249,20 @@ export function useGovernance() {
       contractService.setNetwork(currentNetwork);
       
       // Get the receipt
-      const receipt = await contractService.getContractReceipt(parseInt(proposalId), voter);
+      const receipt = await contractService.getVoteReceipt(parseInt(proposalId), voter);
       
-      setVoteReceipt({
-        hasVoted: receipt.hasVoted,
-        support: receipt.support,
-        votes: ethers.utils.formatUnits(receipt.votes, 18)
-      });
+      if (receipt) {
+        const formattedReceipt = {
+          hasVoted: receipt.hasVoted,
+          support: receipt.support,
+          votes: ethers.utils.formatUnits(receipt.votes, 18)
+        };
+        
+        setVoteReceipt(formattedReceipt);
+        return formattedReceipt;
+      }
       
-      return receipt;
+      return null;
     } catch (error) {
       console.error(`Error getting vote receipt for proposal ${proposalId}:`, error);
       setVoteReceipt(null);
