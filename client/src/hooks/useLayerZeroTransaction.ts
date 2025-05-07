@@ -1,137 +1,175 @@
 import { useState, useCallback } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CreateTransactionInput, LayerZeroTransaction } from '@/types/transaction';
-import { useWalletContext } from '@/components/WalletProvider';
+import { useQueryClient } from '@tanstack/react-query';
+import { 
+  LayerZeroTransaction, 
+  TransactionStatus,
+  TransactionErrorType 
+} from '@/types/transaction';
+import { ErrorType } from '@/types/error';
 
-interface UseLayerZeroTransactionOptions {
-  onSuccess?: (transaction: LayerZeroTransaction) => void;
-  onError?: (error: Error) => void;
+interface TransactionOptions {
+  onSubmitStart?: () => void;
+  onSourceConfirmed?: (txHash: string) => void;
+  onDestinationConfirmed?: (txHash: string) => void;
+  onComplete?: (transaction: LayerZeroTransaction) => void;
+  onError?: (error: ErrorType) => void;
 }
 
-interface UseLayerZeroTransactionResult {
-  transaction: LayerZeroTransaction | null;
-  transactionId: number | null;
-  isLoadingTransaction: boolean;
-  transactionError: Error | null;
-  createTransaction: (input: CreateTransactionInput) => Promise<LayerZeroTransaction>;
-  retryTransaction: (id: number) => Promise<LayerZeroTransaction>;
-  resetTransaction: () => void;
-  isCreating: boolean;
-  isRetrying: boolean;
-}
-
-const useLayerZeroTransaction = (
-  options: UseLayerZeroTransactionOptions = {}
-): UseLayerZeroTransactionResult => {
-  const { address } = useWalletContext();
-  const [transactionId, setTransactionId] = useState<number | null>(null);
+export function useLayerZeroTransaction(options: TransactionOptions = {}) {
   const queryClient = useQueryClient();
-
-  // Create transaction mutation
-  const createMutation = useMutation<LayerZeroTransaction, Error, CreateTransactionInput>({
-    mutationFn: async (transactionInput: CreateTransactionInput) => {
-      const input = {
-        ...transactionInput,
-        walletAddress: transactionInput.walletAddress || address || '',
-        status: transactionInput.status || 'pending'
-      };
-
+  const [currentTransaction, setCurrentTransaction] = useState<LayerZeroTransaction | null>(null);
+  const [transactionStatus, setTransactionStatus] = useState<TransactionStatus>('pending');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [error, setError] = useState<ErrorType | null>(null);
+  
+  // Track a transaction
+  const trackTransaction = useCallback(async (transaction: LayerZeroTransaction) => {
+    try {
+      setCurrentTransaction(transaction);
+      setTransactionStatus(transaction.status as TransactionStatus);
+      setIsModalOpen(true);
+      setError(null);
+      
+      options.onSubmitStart?.();
+      
+      // Set up polling to track transaction status
+      const pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/transactions/${transaction.id}`);
+          if (!response.ok) {
+            throw new Error('Failed to fetch transaction status');
+          }
+          
+          const updatedTransaction = await response.json();
+          setCurrentTransaction(updatedTransaction);
+          setTransactionStatus(updatedTransaction.status as TransactionStatus);
+          
+          // Handle status transitions
+          if (updatedTransaction.status === 'source_confirmed' && transaction.status !== 'source_confirmed') {
+            options.onSourceConfirmed?.(updatedTransaction.sourceTxHash);
+          }
+          
+          if (updatedTransaction.status === 'destination_confirmed' && transaction.status !== 'destination_confirmed') {
+            options.onDestinationConfirmed?.(updatedTransaction.destinationTxHash || '');
+          }
+          
+          if (updatedTransaction.status === 'completed') {
+            clearInterval(pollInterval);
+            options.onComplete?.(updatedTransaction);
+          }
+          
+          if (updatedTransaction.status === 'failed') {
+            clearInterval(pollInterval);
+            setError({
+              message: updatedTransaction.error || 'Transaction failed',
+              type: 'unknown',
+              details: updatedTransaction.data || undefined
+            });
+          }
+          
+        } catch (error) {
+          console.error('Error polling transaction:', error);
+        }
+      }, 3000); // Poll every 3 seconds
+      
+      // Clean up interval on component unmount
+      return () => clearInterval(pollInterval);
+      
+    } catch (error) {
+      console.error('Error tracking transaction:', error);
+      setError({
+        message: 'Failed to track transaction',
+        type: 'network_error',
+      });
+    }
+  }, [options, queryClient]);
+  
+  // Create a new transaction
+  const createTransaction = useCallback(async (transactionData: Partial<LayerZeroTransaction>) => {
+    try {
       const response = await fetch('/api/transactions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(input),
+        body: JSON.stringify(transactionData),
       });
-
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create transaction');
+        throw new Error('Failed to create transaction');
       }
-
-      return response.json();
-    },
-    onSuccess: (transaction) => {
-      setTransactionId(transaction.id);
+      
+      const transaction = await response.json();
+      trackTransaction(transaction);
+      
+      // Invalidate the transaction list query
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
-      options.onSuccess?.(transaction);
-    },
-    onError: (error) => {
+      
+      return transaction;
+      
+    } catch (error) {
       console.error('Error creating transaction:', error);
-      options.onError?.(error);
-    },
-  });
-
-  // Retry transaction mutation
-  const retryMutation = useMutation<LayerZeroTransaction, Error, number>({
-    mutationFn: async (id: number) => {
-      const response = await fetch(`/api/transactions/${id}/retry`, {
+      setError({
+        message: 'Failed to create transaction',
+        type: 'network_error',
+      });
+      return null;
+    }
+  }, [trackTransaction, queryClient]);
+  
+  // Retry a failed transaction
+  const retryTransaction = useCallback(async (transactionId: number) => {
+    try {
+      const response = await fetch(`/api/transactions/${transactionId}/retry`, {
         method: 'POST',
       });
-
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to retry transaction');
+        throw new Error('Failed to retry transaction');
       }
-
-      return response.json();
-    },
-    onSuccess: (transaction) => {
+      
+      const result = await response.json();
+      
+      // Invalidate the transaction list query
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/transactions', transactionId] });
-      options.onSuccess?.(transaction);
-    },
-    onError: (error) => {
+      
+      // Track the retried transaction
+      trackTransaction(result.transaction);
+      
+      return result.transaction;
+      
+    } catch (error) {
       console.error('Error retrying transaction:', error);
-      options.onError?.(error);
-    },
-  });
-
-  // Get transaction query
-  const {
-    data: transaction,
-    isLoading: isLoadingTransaction,
-    error,
-  } = useQuery<LayerZeroTransaction, Error>({
-    queryKey: ['/api/transactions', transactionId],
-    queryFn: async () => {
-      if (!transactionId) {
-        return null;
-      }
-
-      const response = await fetch(`/api/transactions/${transactionId}`);
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch transaction');
-      }
-
-      return response.json();
-    },
-    enabled: !!transactionId,
-    refetchInterval: (data) => {
-      // Refetch more frequently for pending transactions
-      if (data && ['pending', 'source_confirmed'].includes(data.status)) {
-        return 5000; // 5 seconds
-      }
-      return false; // Don't auto-refetch if transaction is complete or failed
-    },
-  });
-
-  const resetTransaction = useCallback(() => {
-    setTransactionId(null);
+      setError({
+        message: 'Failed to retry transaction',
+        type: 'network_error',
+      });
+      return null;
+    }
+  }, [trackTransaction, queryClient]);
+  
+  // Close the transaction modal
+  const closeTransactionModal = useCallback(() => {
+    setIsModalOpen(false);
   }, []);
-
+  
+  // Reset the current transaction state
+  const resetTransaction = useCallback(() => {
+    setCurrentTransaction(null);
+    setTransactionStatus('pending');
+    setIsModalOpen(false);
+    setError(null);
+  }, []);
+  
   return {
-    transaction: transaction || null,
-    transactionId,
-    isLoadingTransaction,
-    transactionError: error || null,
-    createTransaction: createMutation.mutateAsync,
-    retryTransaction: retryMutation.mutateAsync,
+    currentTransaction,
+    transactionStatus,
+    isModalOpen,
+    error,
+    createTransaction,
+    trackTransaction,
+    retryTransaction,
+    closeTransactionModal,
     resetTransaction,
-    isCreating: createMutation.isPending,
-    isRetrying: retryMutation.isPending,
   };
-};
-
-export default useLayerZeroTransaction;
+}

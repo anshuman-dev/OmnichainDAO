@@ -21,7 +21,7 @@ import { ArrowRight, ExternalLink, RotateCw, CheckCircle, XCircle, Clock, Activi
 import { LayerZeroTransaction, TransactionStatus } from "@/types/transaction";
 import { useWalletContext } from './WalletProvider';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ErrorType } from './TransactionErrorHandler';
+import { ErrorType } from '@/types/error';
 
 interface TransactionHistoryProps {
   limit?: number;

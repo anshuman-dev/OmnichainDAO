@@ -1,60 +1,52 @@
 /**
- * Network related types for the LayerZero networks
+ * Network type definitions for the OmniGovern DAO platform
+ * These types help manage blockchain network information
  */
 
-// Network interface for a blockchain network
+// Supported network types
+export type NetworkType = 'mainnet' | 'testnet' | 'devnet';
+
+// Network status options
+export type NetworkStatus = 'active' | 'degraded' | 'inactive';
+
+// Network interface for LayerZero compatible chains
 export interface Network {
-  id: string;           // Unique identifier for the network
-  name: string;         // Display name (e.g., "Ethereum Sepolia")
-  chainId: number;      // EVM chain ID
-  lzChainId: number;    // LayerZero chain ID (used in LZ protocol)
-  rpc: string;          // RPC endpoint URL
-  isHub: boolean;       // Whether this network is a LayerZero Hub
-  color: string;        // Color code for UI representation
+  id: string;              // Unique identifier (e.g., 'sepolia')
+  name: string;            // Display name (e.g., 'Ethereum Sepolia')
+  chainId: number;         // EVM chain ID
+  lzChainId: number;       // LayerZero endpoint ID
+  rpc?: string;            // RPC endpoint URL
+  explorer?: string;       // Block explorer URL
+  isHub?: boolean;         // Whether this is a hub chain in the LayerZero network
+  color?: string;          // Brand color for UI
+  logo?: string;           // Logo URL
+  type?: NetworkType;      // Network type
+  status?: NetworkStatus;  // Current network status
+  blockNumber?: number;    // Latest block number
+  gasPrice?: string;       // Current gas price
+  txCount?: number;        // Recent transaction count
+  latency?: number;        // Network latency in ms
 }
 
-// Network status interface for monitoring network health
-export interface NetworkStatus {
-  id: number;           // Status ID
-  networkId: string;    // Corresponds to Network.id
-  name: string;         // Display name
-  chainId: number;      // EVM chain ID
-  status: string;       // 'active', 'congested', 'inactive'
-  gasPrice: string | null; // Current gas price in gwei
-  latency: number | null;  // Network latency in ms
-  txCount: number | null;  // Recent transaction count
-  updatedAt: Date | null;  // Last update timestamp
+// DVN (Decentralized Verification Network) configuration
+export interface DVNConfig {
+  id: string;              // DVN identifier
+  name: string;            // DVN name
+  enabled: boolean;        // Whether this DVN is enabled
+  requiredSignatures: number; // Number of required signatures
+  securityLevel?: number;  // Security level 1-4
 }
 
-// Gas fee estimation interface
-export interface GasEstimation {
-  networkId: string;           // Corresponds to Network.id
-  chainId: number;             // EVM chain ID
-  baseFee: string;             // Base fee in gwei
-  priorityFee: string;         // Priority fee in gwei
-  total: string;               // Total gas price
-  estimatedTimeBlocks: number; // Estimated confirmation time
-  equivalentUSD?: string;      // USD equivalent (if available)
-}
-
-// LayerZero fee structure
-export interface LayerZeroFee {
-  messageFee: string;      // Fee for message 
-  dvnFee: string;          // Fee for DVN (verification)
-  oracleFee: string;       // Fee for Oracle
-  total: string;           // Total LayerZero fee
-  estimatedUSD?: string;   // USD equivalent (if available)
-}
-
-// DVN configuration interface
-export interface DVNConfiguration {
-  networkId: string;           // Corresponds to Network.id
-  securityScore: number;       // Overall security score (0-100)
-  securityLevel: string;       // "low", "medium", "high"
-  dvns: Array<{                // List of DVNs available
-    id: string;                // DVN identifier
-    name: string;              // Display name 
-    enabled: boolean;          // Whether it's currently enabled
-    requiredSignatures: number; // Signatures needed
-  }>;
+// Security settings for a network
+export interface NetworkSecurity {
+  networkId: string;
+  securityScore: number;   // 0-100 score
+  securityLevel: string;   // "Low", "Medium", "High"
+  settings?: {
+    securityLevel: number;
+    trustedEndpointMode: boolean;
+    multiSignatureVerification: boolean;
+    enabledDvns: string[];
+  };
+  dvns: DVNConfig[];
 }

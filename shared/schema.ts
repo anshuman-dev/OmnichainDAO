@@ -108,6 +108,7 @@ export const insertLayerZeroTransactionSchema = createInsertSchema(layerZeroTran
   error: true,
   walletAddress: true,
   data: true,
+  updatedAt: true,
 });
 
 // Types

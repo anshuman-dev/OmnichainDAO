@@ -9,7 +9,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { CheckCircle, XCircle, ExternalLink, ArrowRight } from "lucide-react";
-import TransactionErrorHandler, { ErrorType } from './TransactionErrorHandler';
+import TransactionErrorHandler from './TransactionErrorHandler';
+import { ErrorType } from '@/types/error';
 import { TransactionStatus } from '@/types/transaction';
 
 interface TransactionStep {

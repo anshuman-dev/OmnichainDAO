@@ -6,14 +6,7 @@ import {
 } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { XCircle, AlertTriangle, RefreshCw, Info } from "lucide-react";
-import { TransactionErrorType } from "@/types/transaction";
-
-export type ErrorType = {
-  code?: string | number;
-  message: string;
-  type?: TransactionErrorType;
-  details?: string;
-};
+import { ErrorType } from "@/types/error";
 
 interface TransactionErrorHandlerProps {
   error: ErrorType;
