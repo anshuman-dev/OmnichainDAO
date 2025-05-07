@@ -1,80 +1,70 @@
 /**
- * Transaction related types for LayerZero cross-chain transactions
+ * Transaction type definitions for the OmniGovern DAO platform
+ * These types help track and display cross-chain transactions powered by LayerZero
  */
 
+// Transaction types supported by the platform
 export type TransactionType = 
-  | 'token_transfer'     // Regular token transfer within a chain
-  | 'token_bridge'       // Cross-chain token transfer via LayerZero OFT
-  | 'cross_chain_message' // Generic cross-chain message via LayerZero
-  | 'proposal_creation'  // Creating a DAO proposal 
-  | 'vote'               // Casting a vote on a proposal
-  | 'execution';         // Executing a proposal
+  | 'token_bridge'    // OFT token bridging across chains
+  | 'token_transfer'  // Standard token transfer (same chain)
+  | 'proposal_creation' // Creating a governance proposal
+  | 'vote'            // Casting a vote on a proposal
+  | 'execution'       // Executing a passed proposal
+  | 'other';          // Other transaction types
 
+// Transaction status states
 export type TransactionStatus = 
-  | 'pending'              // Transaction initiated but not confirmed on source chain
-  | 'source_confirmed'     // Transaction confirmed on source chain, waiting for destination
-  | 'destination_confirmed' // Transaction confirmed on destination chain but final steps pending
-  | 'completed'            // Transaction fully completed
-  | 'failed';              // Transaction failed at some point
+  | 'pending'                // Initial state, transaction submitted but not confirmed
+  | 'source_confirmed'       // Transaction confirmed on source chain
+  | 'source_failed'          // Transaction failed on source chain
+  | 'in_flight'              // Message in flight across chains via LayerZero
+  | 'destination_confirmed'  // Transaction confirmed on destination chain
+  | 'completed'              // Transaction fully completed on all chains
+  | 'failed';                // Transaction failed
 
-// Input for creating a new transaction
-export interface CreateTransactionInput {
-  type: TransactionType;
-  sourceChain: string;
-  sourceTxHash: string;
-  walletAddress?: string;
-  destinationChain?: string;
-  data?: string;
-  status?: TransactionStatus;
-  messageId?: string;
-}
+// Error types that might occur during transactions
+export type TransactionErrorType =
+  | 'user_rejected'          // User rejected the transaction
+  | 'insufficient_funds'     // Insufficient funds for transaction
+  | 'slippage_too_high'      // Price slippage exceeded tolerance
+  | 'gas_estimation_failed'  // Failed to estimate gas
+  | 'timeout'                // Transaction timed out
+  | 'network_error'          // Network connection issues
+  | 'relayer_error'          // LayerZero relayer error
+  | 'unknown';               // Unknown error
 
-// Full transaction with system-generated fields
+// Interface for LayerZero transaction objects
 export interface LayerZeroTransaction {
   id: number;
   type: TransactionType;
-  status: TransactionStatus;
-  sourceChain: string;
-  destinationChain: string | null;
   walletAddress: string;
-  sourceTxHash: string;
-  destinationTxHash: string | null;
-  messageId: string | null;
-  data: string | null;
-  error: string | null;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-}
-
-// Transaction with estimated gas fees
-export interface TransactionWithFees extends LayerZeroTransaction {
-  fees: {
-    sourceGas: string;
-    layerZeroFee: string;
-    destinationGas: string | null;
-    total: string;
-    estimatedUSD: string | null;
-  }
-}
-
-// Tracked message across chains
-export interface CrossChainMessage {
-  id: string;
   sourceChain: string;
-  destinationChain: string;
-  sourceAddress: string;
-  destinationAddress: string;
-  status: TransactionStatus;
-  payload: string | null;
+  sourceTxHash: string;
+  destinationChain?: string | null;
+  destinationTxHash?: string | null;
+  amount?: string | null;
+  token?: string | null;
+  status: string;
+  messageId?: string | null;
+  data?: any | null;
+  error?: string | null;
   createdAt: Date;
-  confirmedAt: Date | null;
+  updatedAt: Date;
 }
 
-// DVN security configuration for transactions
-export interface DVNConfiguration {
-  enabled: boolean;
-  verifiers: number;
-  requiredSignatures: number;
-  securityLevel: 'low' | 'medium' | 'high';
-  estimatedAdditionalCost: string;
+// Interface for transaction retry options
+export interface TransactionRetryOptions {
+  maxAttempts: number;
+  delayMs: number;
+  backoffFactor: number;
+}
+
+// Interface for cross-chain message parameters
+export interface CrossChainMessageParams {
+  dstChainId: number;
+  message: string;
+  options: {
+    gasLimit: string;
+    refundAddress: string;
+  };
 }

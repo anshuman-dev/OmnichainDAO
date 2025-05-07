@@ -449,6 +449,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // POST: Retry a failed transaction
+  // GET: Transactions (unified API for all transaction types)
+  app.get('/api/transactions', async (req, res) => {
+    try {
+      const { walletAddress, status, type } = req.query;
+      
+      // Default to LayerZero transactions, but we could extend this
+      // to include other transaction types in the future
+      let transactions = [];
+      
+      if (walletAddress) {
+        transactions = await storage.getLayerZeroTransactionsByAddress(walletAddress as string);
+      } else if (status) {
+        transactions = await storage.getLayerZeroTransactionsByStatus(status as string);
+      } else {
+        // Get all transactions (could add pagination later)
+        // For now, we'll just return the first 50 transactions
+        const byStatus = await storage.getLayerZeroTransactionsByStatus('pending');
+        const completed = await storage.getLayerZeroTransactionsByStatus('completed');
+        const failed = await storage.getLayerZeroTransactionsByStatus('failed');
+        
+        transactions = [...byStatus, ...completed, ...failed].slice(0, 50);
+      }
+      
+      // Filter by type if specified
+      if (type) {
+        transactions = transactions.filter(tx => tx.type === type);
+      }
+      
+      res.json(transactions);
+    } catch (error) {
+      res.status(500).json({ 
+        error: "Failed to fetch transactions",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  
+  // GET: Transaction by ID
+  app.get('/api/transactions/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid transaction ID" });
+      }
+      
+      const transaction = await storage.getLayerZeroTransaction(id);
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+      
+      res.json(transaction);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch transaction" });
+    }
+  });
+  
+  // POST: Create Transaction (alias for layerzero/transactions)
+  app.post('/api/transactions', async (req, res) => {
+    try {
+      // Redirect to the layerzero transactions endpoint
+      const transaction = await storage.createLayerZeroTransaction(req.body);
+      res.status(201).json(transaction);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create transaction" });
+    }
+  });
+  
+  // POST: Retry a failed transaction
+  app.post('/api/transactions/:id/retry', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid transaction ID" });
+      }
+      
+      const transaction = await storage.getLayerZeroTransaction(id);
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+      
+      if (transaction.status !== 'failed') {
+        return res.status(400).json({ error: "Only failed transactions can be retried" });
+      }
+      
+      // Update the transaction status to pending to retry
+      const updated = await storage.updateLayerZeroTransaction(id, {
+        status: 'pending',
+        error: null,
+        updatedAt: new Date()
+      });
+      
+      // Simulate transaction processing as we did with the original
+      if (updated.destinationChain) {
+        setTimeout(async () => {
+          try {
+            await storage.updateLayerZeroTransaction(id, {
+              status: "source_confirmed",
+              messageId: `0x${Math.random().toString(16).substring(2, 34).padStart(40, '0')}`,
+            });
+            
+            setTimeout(async () => {
+              try {
+                await storage.updateLayerZeroTransaction(id, {
+                  status: "completed",
+                  destinationTxHash: `0x${Math.random().toString(16).substring(2, 34).padStart(64, '0')}`,
+                });
+              } catch (err) {
+                console.error(`Error retrying transaction ${id}:`, err);
+              }
+            }, 8000);
+          } catch (err) {
+            console.error(`Error retrying transaction ${id}:`, err);
+          }
+        }, 5000);
+      } else {
+        setTimeout(async () => {
+          try {
+            await storage.updateLayerZeroTransaction(id, {
+              status: "completed",
+            });
+          } catch (err) {
+            console.error(`Error retrying transaction ${id}:`, err);
+          }
+        }, 5000);
+      }
+      
+      res.json({ success: true, transaction: updated });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to retry transaction" });
+    }
+  });
+  
   app.post("/api/layerzero/transactions/retry", async (req, res) => {
     try {
       const { id } = req.body;

@@ -1,119 +1,137 @@
 import React from 'react';
-import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { 
+  Alert, 
+  AlertDescription, 
+  AlertTitle 
+} from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, RotateCw, ExternalLink, X } from "lucide-react";
+import { XCircle, AlertTriangle, RefreshCw, Info } from "lucide-react";
+import { TransactionErrorType } from "@/types/transaction";
 
-export enum ErrorType {
-  NETWORK_ERROR = 'network_error',
-  EXECUTION_ERROR = 'execution_error',
-  VALIDATION_ERROR = 'validation_error',
-  UNKNOWN_ERROR = 'unknown_error',
-}
+export type ErrorType = {
+  code?: string | number;
+  message: string;
+  type?: TransactionErrorType;
+  details?: string;
+};
 
 interface TransactionErrorHandlerProps {
-  error: Error;
-  errorType: ErrorType;
-  txHash?: string;
-  transactionId?: number;
-  networkName?: string;
+  error: ErrorType;
   onRetry?: () => void;
-  onClear?: () => void;
+  onDismiss?: () => void;
+  showRetry?: boolean;
+  showDismiss?: boolean;
 }
 
 export default function TransactionErrorHandler({
   error,
-  errorType,
-  txHash,
-  transactionId,
-  networkName,
   onRetry,
-  onClear
+  onDismiss,
+  showRetry = true,
+  showDismiss = true
 }: TransactionErrorHandlerProps) {
-  const getErrorTitle = () => {
-    switch (errorType) {
-      case ErrorType.NETWORK_ERROR:
-        return `${networkName || 'Network'} Connection Error`;
-      case ErrorType.EXECUTION_ERROR:
-        return "Transaction Failed";
-      case ErrorType.VALIDATION_ERROR:
-        return "Validation Error";
-      case ErrorType.UNKNOWN_ERROR:
-      default:
-        return "An Error Occurred";
-    }
-  };
-
-  const getErrorAction = () => {
-    switch (errorType) {
-      case ErrorType.NETWORK_ERROR:
-        return "Please check your connection and try again.";
-      case ErrorType.EXECUTION_ERROR:
-        return "The transaction encountered an error during execution.";
-      case ErrorType.VALIDATION_ERROR:
-        return "Please check your inputs and try again.";
-      case ErrorType.UNKNOWN_ERROR:
+  const getErrorMessage = () => {
+    if (!error) return "Unknown error occurred";
+    
+    // If we have a specific error message, use it
+    if (error.message) return error.message;
+    
+    // Otherwise, provide generic messages based on error type
+    switch (error.type) {
+      case 'user_rejected':
+        return "Transaction was rejected. Please try again when you're ready.";
+      case 'insufficient_funds':
+        return "You don't have enough funds to complete this transaction.";
+      case 'slippage_too_high':
+        return "Price movement too high. Try increasing slippage tolerance or try again later.";
+      case 'gas_estimation_failed':
+        return "Failed to estimate gas. The transaction may fail or the contract doesn't allow this operation.";
+      case 'timeout':
+        return "Transaction timed out. Network may be congested.";
+      case 'network_error':
+        return "Network connection error. Please check your internet connection.";
+      case 'relayer_error':
+        return "LayerZero relayer encountered an error. Please try again later.";
       default:
         return "An unexpected error occurred. Please try again.";
     }
   };
-
+  
   const getErrorIcon = () => {
-    return <AlertCircle className="h-4 w-4" />;
+    if (!error || !error.type) return <AlertTriangle className="h-5 w-5" />;
+    
+    switch (error.type) {
+      case 'user_rejected':
+        return <XCircle className="h-5 w-5" />;
+      case 'insufficient_funds':
+        return <AlertTriangle className="h-5 w-5" />;
+      case 'timeout':
+      case 'network_error':
+        return <RefreshCw className="h-5 w-5" />;
+      default:
+        return <Info className="h-5 w-5" />;
+    }
+  };
+  
+  const getErrorVariant = () => {
+    if (!error || !error.type) return "destructive";
+    
+    switch (error.type) {
+      case 'user_rejected':
+        return "default";
+      case 'insufficient_funds':
+      case 'slippage_too_high':
+      case 'gas_estimation_failed':
+        return "destructive";
+      case 'timeout':
+      case 'network_error':
+      case 'relayer_error':
+        return "destructive";
+      default:
+        return "destructive";
+    }
   };
 
   return (
-    <Alert variant="destructive">
+    <Alert variant={getErrorVariant()}>
       <div className="flex items-start">
-        <div className="flex-1">
-          <AlertCircle className="h-4 w-4 mr-2" />
-          <AlertTitle className="inline-flex items-center">
-            {getErrorTitle()}
-          </AlertTitle>
-          <AlertDescription className="mt-2">
-            <p>{getErrorAction()}</p>
-            {error && <p className="text-sm mt-1 overflow-hidden text-ellipsis">{error.message}</p>}
-          </AlertDescription>
+        <div className="mr-3 mt-0.5">
+          {getErrorIcon()}
         </div>
-        
-        <div className="flex space-x-2 mt-2">
-          {onClear && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={onClear}
-              className="h-8 px-2"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+        <div className="flex-1">
+          <AlertTitle>Transaction Error</AlertTitle>
+          <AlertDescription className="mt-1">
+            {getErrorMessage()}
+            {error.details && (
+              <div className="mt-2 text-sm opacity-80">
+                {error.details}
+              </div>
+            )}
+          </AlertDescription>
           
-          {txHash && (
-            <Button
-              variant="outline"
-              size="sm"
-              asChild
-              className="h-8"
-            >
-              <a 
-                href={`https://sepolia.etherscan.io/tx/${txHash}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center"
-              >
-                <ExternalLink className="h-3 w-3 mr-1" /> View
-              </a>
-            </Button>
-          )}
-          
-          {onRetry && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={onRetry}
-              className="h-8"
-            >
-              <RotateCw className="h-3 w-3 mr-1" /> Retry
-            </Button>
+          {(onRetry || onDismiss) && (
+            <div className="mt-3 flex gap-2">
+              {showRetry && onRetry && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={onRetry}
+                >
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                  Try Again
+                </Button>
+              )}
+              
+              {showDismiss && onDismiss && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={onDismiss}
+                >
+                  Dismiss
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </div>
