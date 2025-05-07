@@ -11,12 +11,12 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import ChainSelector from "./ChainSelector";
 import { useToast } from "@/hooks/use-toast";
 import { useWalletContext } from "./WalletProvider";
-import useNetworkData from "@/hooks/useNetworkData";
-import useLayerZeroTransaction from "@/hooks/useLayerZeroTransaction";
+import { useNetworkData } from "@/hooks/useNetworkData";
+import { useLayerZeroTransaction } from "@/hooks/useLayerZeroTransaction";
 import { Network } from "@/types/network";
 import { Spinner } from "@/components/ui/spinner";
 import TransactionConfirmationModal from './TransactionConfirmationModal';
-import { TransactionStatus } from './TransactionConfirmationModal';
+import { TransactionStatus } from '@/types/transaction';
 import TransactionErrorHandler from './TransactionErrorHandler';
 import { ErrorType } from '@/types/error';
 import contractService from '@/services/contractService';
@@ -383,11 +383,10 @@ export default function EnhancedTokenActions({ openWalletModal }: EnhancedTokenA
         description="Your transaction is being processed across chains"
         sourceChain={sourceBridgeNetwork?.name || currentNetwork?.name || "Unknown"}
         destinationChain={targetBridgeNetwork?.name}
-        txHash={transactionHash}
+        sourceTxHash={transactionHash}
         status={transactionStatus}
-        estimatedFee={estimatedFee}
         error={error}
-        onRetry={retryTransaction}
+        onRetry={() => transaction?.id && retryTransaction(transaction.id)}
       />
     </>
   );
