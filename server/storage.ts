@@ -61,6 +61,59 @@ export class MemStorage implements IStorage {
   currentSupplyCheckId: number;
   currentNetworkStatusId: number;
   currentLayerZeroTransactionId: number;
+  
+  // LayerZero Transaction methods
+  async getLayerZeroTransaction(id: number): Promise<LayerZeroTransaction | undefined> {
+    return this.layerZeroTransactions.get(id);
+  }
+  
+  async getLayerZeroTransactionByHash(hash: string): Promise<LayerZeroTransaction | undefined> {
+    return Array.from(this.layerZeroTransactions.values()).find(
+      (tx) => tx.sourceTxHash === hash || tx.destinationTxHash === hash
+    );
+  }
+  
+  async getLayerZeroTransactionsByAddress(address: string): Promise<LayerZeroTransaction[]> {
+    return Array.from(this.layerZeroTransactions.values())
+      .filter((tx) => tx.walletAddress.toLowerCase() === address.toLowerCase())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // Most recent first
+  }
+  
+  async getLayerZeroTransactionsByStatus(status: string): Promise<LayerZeroTransaction[]> {
+    return Array.from(this.layerZeroTransactions.values())
+      .filter((tx) => tx.status === status)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()); // Most recent first
+  }
+  
+  async createLayerZeroTransaction(transaction: InsertLayerZeroTransaction): Promise<LayerZeroTransaction> {
+    const id = this.currentLayerZeroTransactionId++;
+    const tx: LayerZeroTransaction = { 
+      ...transaction, 
+      id, 
+      createdAt: new Date(), 
+      updatedAt: new Date(),
+      status: transaction.status || 'pending'
+    };
+    this.layerZeroTransactions.set(id, tx);
+    return tx;
+  }
+  
+  async updateLayerZeroTransaction(id: number, updates: Partial<InsertLayerZeroTransaction>): Promise<LayerZeroTransaction> {
+    const existing = this.layerZeroTransactions.get(id);
+    
+    if (!existing) {
+      throw new Error(`LayerZero transaction with ID ${id} not found`);
+    }
+    
+    const updated: LayerZeroTransaction = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date()
+    };
+    
+    this.layerZeroTransactions.set(id, updated);
+    return updated;
+  }
 
   constructor() {
     this.users = new Map();

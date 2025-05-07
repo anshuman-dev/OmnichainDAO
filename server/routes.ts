@@ -1,7 +1,12 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertBridgeTransactionSchema, insertSupplyCheckSchema, insertNetworkStatusSchema } from "@shared/schema";
+import { 
+  insertBridgeTransactionSchema, 
+  insertSupplyCheckSchema, 
+  insertNetworkStatusSchema,
+  insertLayerZeroTransactionSchema
+} from "@shared/schema";
 import { z } from "zod";
 import { ethers } from "ethers";
 import fs from 'fs';
@@ -299,6 +304,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({ error: "Failed to update network status" });
       }
+    }
+  });
+  
+  // GET: LayerZero Transaction History by Wallet Address
+  app.get("/api/layerzero/transactions/:address", async (req, res) => {
+    try {
+      const { address } = req.params;
+      const transactions = await storage.getLayerZeroTransactionsByAddress(address);
+      res.json(transactions);
+    } catch (error) {
+      res.status(500).json({ 
+        error: "Failed to fetch LayerZero transactions",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  
+  // GET: LayerZero Transaction by ID
+  app.get("/api/layerzero/transaction/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid transaction ID" });
+      }
+      
+      const transaction = await storage.getLayerZeroTransaction(id);
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+      
+      res.json(transaction);
+    } catch (error) {
+      res.status(500).json({ 
+        error: "Failed to fetch LayerZero transaction",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  
+  // POST: Create LayerZero Transaction
+  app.post("/api/layerzero/transaction", async (req, res) => {
+    try {
+      const validateSchema = insertLayerZeroTransactionSchema.extend({
+        sourceChain: z.string().min(1, "Source chain is required"),
+        sourceTxHash: z.string().min(1, "Source transaction hash is required"),
+        walletAddress: z.string().min(1, "Wallet address is required"),
+        type: z.enum(["token_bridge", "proposal_creation", "vote", "execution"])
+      });
+      
+      const data = validateSchema.parse(req.body);
+      const transaction = await storage.createLayerZeroTransaction(data);
+      
+      // Simulate a transition to in_progress state after a delay (representing message being sent)
+      if (data.destinationChain) {
+        setTimeout(async () => {
+          try {
+            await storage.updateLayerZeroTransaction(transaction.id, {
+              status: "in_progress",
+              messageId: `0x${Math.random().toString(16).substring(2, 34).padStart(40, '0')}`,
+            });
+            console.log(`Transaction ${transaction.id} updated to in_progress`);
+            
+            // Then simulate completion after another delay
+            setTimeout(async () => {
+              try {
+                await storage.updateLayerZeroTransaction(transaction.id, {
+                  status: "completed",
+                  destinationTxHash: `0x${Math.random().toString(16).substring(2, 34).padStart(64, '0')}`,
+                });
+                console.log(`Transaction ${transaction.id} completed`);
+              } catch (err) {
+                console.error(`Error updating transaction ${transaction.id}:`, err);
+              }
+            }, 15000); // 15 seconds for final confirmation
+            
+          } catch (err) {
+            console.error(`Error updating transaction ${transaction.id}:`, err);
+          }
+        }, 5000); // 5 seconds for initial confirmation
+      }
+      
+      res.status(201).json(transaction);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ 
+          error: "Failed to create LayerZero transaction",
+          details: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+  });
+  
+  // PUT: Update LayerZero Transaction
+  app.put("/api/layerzero/transaction/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: "Invalid transaction ID" });
+      }
+      
+      const transaction = await storage.getLayerZeroTransaction(id);
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+      
+      const data = req.body;
+      const updated = await storage.updateLayerZeroTransaction(id, data);
+      
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ 
+        error: "Failed to update LayerZero transaction",
+        details: error instanceof Error ? error.message : String(error)
+      });
     }
   });
   
