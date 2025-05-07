@@ -1,25 +1,23 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 
-export interface SpinnerProps extends React.HTMLAttributes<HTMLDivElement> {
-  size?: 'sm' | 'md' | 'lg';
+interface SpinnerProps extends React.HTMLAttributes<HTMLDivElement> {
+  size?: 'default' | 'sm' | 'lg';
 }
 
-export function Spinner({ size = 'md', className, ...props }: SpinnerProps) {
-  const sizeClasses = {
-    sm: 'h-4 w-4 border-2',
-    md: 'h-6 w-6 border-2',
-    lg: 'h-8 w-8 border-3'
-  };
-
+export function Spinner({ className, size = 'default', ...props }: SpinnerProps) {
   return (
-    <div 
+    <div
       className={cn(
-        'inline-block rounded-full border-current border-solid border-r-transparent animate-spin',
-        sizeClasses[size],
+        'animate-spin rounded-full border-2 border-current border-t-transparent',
+        size === 'default' && 'h-6 w-6',
+        size === 'sm' && 'h-4 w-4',
+        size === 'lg' && 'h-8 w-8',
         className
       )}
       {...props}
-    />
+    >
+      <span className="sr-only">Loading</span>
+    </div>
   );
 }

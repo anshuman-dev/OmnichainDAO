@@ -1,46 +1,83 @@
+/**
+ * Transaction related types for the LayerZero transactions
+ */
+
+// Transaction status filter options
+export enum FilterStatus {
+  ALL = "all",
+  PENDING = "pending",
+  COMPLETED = "completed",
+  FAILED = "failed"
+}
+
+// LayerZero Transaction interface
 export interface LayerZeroTransaction {
   id: number;
   type: string;
-  status: string;
+  walletAddress: string;
   sourceChain: string;
   destinationChain: string | null;
   sourceTxHash: string;
   destinationTxHash: string | null;
   messageId: string | null;
-  error: string | null;
+  status: string;
   data: string | null;
-  walletAddress: string;
+  error: string | null;
   createdAt: Date | null;
   updatedAt: Date | null;
 }
 
+// Input interface for creating a new transaction
 export interface CreateTransactionInput {
   type: string;
   sourceChain: string;
   sourceTxHash: string;
   destinationChain?: string;
-  status: string;
   walletAddress?: string;
-  data?: string;
+  data?: string; 
+  messageId?: string;
+  status?: string;
 }
 
-export type TransactionStatus = 
-  | 'pending' 
-  | 'source_confirmed' 
-  | 'destination_confirmed' 
-  | 'completed' 
-  | 'failed';
-
-export enum FilterStatus {
-  ALL = 'all',
-  PENDING = 'pending',
-  COMPLETED = 'completed',
-  FAILED = 'failed'
+// Generic transaction update input
+export interface UpdateTransactionInput {
+  id: number;
+  status?: string;
+  destinationTxHash?: string;
+  messageId?: string;
+  error?: string;
 }
 
-export enum ErrorType {
-  NETWORK_ERROR = 'network_error',
-  EXECUTION_ERROR = 'execution_error',
-  TIMEOUT_ERROR = 'timeout_error',
-  UNKNOWN = 'unknown_error'
+// Transaction simulation result
+export interface TransactionSimulationResult {
+  success: boolean;
+  estimatedGas: string;
+  error?: string;
+  details?: {
+    messageSize: number;
+    nativeAmount: string;
+    lzFee: string;
+  };
+}
+
+// Transaction Gas estimation across chains
+export interface GasEstimation {
+  sourceChain: {
+    chainId: number;
+    gasPrice: string;
+    estimatedGas: string;
+    totalCost: string;
+  };
+  destinationChain?: {
+    chainId: number;
+    gasPrice: string;
+    estimatedGas: string;
+    totalCost: string;
+  };
+  layerZeroFee?: {
+    messageFee: string;
+    oracleFee: string;
+    relayerFee: string;
+    totalFee: string;
+  }
 }

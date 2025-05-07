@@ -1,16 +1,9 @@
-import React from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ExternalLink, ArrowRight, Check, X, RotateCw, AlertCircle } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
-import { AlertCircle, ArrowRight, CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
-export type TransactionStatus = 
-  | 'pending' 
-  | 'source_confirmed' 
-  | 'destination_confirmed' 
-  | 'completed' 
-  | 'failed';
+export type TransactionStatus = 'pending' | 'source_confirmed' | 'destination_confirmed' | 'completed' | 'failed';
 
 interface TransactionConfirmationModalProps {
   isOpen: boolean;
@@ -39,124 +32,119 @@ export default function TransactionConfirmationModal({
   error,
   onRetry
 }: TransactionConfirmationModalProps) {
-  
-  const renderStatusIcon = () => {
+  const getStatusIcon = () => {
     switch (status) {
       case 'pending':
-        return <Spinner size="lg" className="text-blue-400" />;
+        return <Spinner size="default" className="text-blue-500" />;
       case 'source_confirmed':
-        return <Loader2 className="h-12 w-12 text-yellow-400 animate-spin" />;
+        return destinationChain ? <Spinner size="default" className="text-blue-500" /> : <Check className="h-6 w-6 text-green-500" />;
       case 'destination_confirmed':
-        return <Loader2 className="h-12 w-12 text-green-400 animate-spin" />;
       case 'completed':
-        return <CheckCircle2 className="h-12 w-12 text-green-500" />;
+        return <Check className="h-6 w-6 text-green-500" />;
       case 'failed':
-        return <AlertCircle className="h-12 w-12 text-red-500" />;
+        return <X className="h-6 w-6 text-red-500" />;
       default:
-        return <Spinner size="lg" />;
+        return <AlertCircle className="h-6 w-6 text-yellow-500" />;
     }
   };
-  
+
   const getStatusText = () => {
     switch (status) {
       case 'pending':
-        return "Transaction is being processed";
+        return 'Transaction in progress...';
       case 'source_confirmed':
-        return "Confirmed on source chain, waiting for destination chain";
+        return destinationChain ? 'Confirmed on source chain, awaiting destination chain...' : 'Transaction confirmed!';
       case 'destination_confirmed':
-        return "Confirmed on destination chain, finalizing";
+        return 'Confirmed on destination chain!';
       case 'completed':
-        return "Transaction completed successfully";
+        return 'Transaction completed successfully!';
       case 'failed':
-        return "Transaction failed";
+        return 'Transaction failed!';
       default:
-        return "Processing transaction";
+        return 'Unknown status';
     }
   };
-  
-  const getStatusBadgeColor = () => {
-    switch (status) {
-      case 'pending':
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-      case 'source_confirmed':
-        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
-      case 'destination_confirmed':
-        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
-      case 'completed':
-        return "bg-green-500/10 text-green-500 border-green-500/20";
-      case 'failed':
-        return "bg-red-500/10 text-red-500 border-red-500/20";
-      default:
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20";
-    }
-  };
-  
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
-            {description}
-          </DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         
-        <div className="flex flex-col items-center justify-center py-4 space-y-4">
-          {renderStatusIcon()}
-          
-          <div className="text-center">
-            <div className={`px-3 py-1 rounded-full text-sm inline-flex items-center border ${getStatusBadgeColor()}`}>
-              {getStatusText()}
+        <div className="py-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col items-center">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mb-2">
+                <span className="text-blue-700 font-medium">{sourceChain?.charAt(0) || '?'}</span>
+              </div>
+              <span className="text-sm font-medium">{sourceChain}</span>
             </div>
-          </div>
-          
-          {txHash && (
-            <div className="text-xs text-gray-500 flex items-center">
-              TX: {txHash.substring(0, 8)}...{txHash.substring(txHash.length - 6)}
-              <a 
-                href={`https://layerzeroscan.com/tx/${txHash}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="ml-1 inline-flex items-center text-blue-500 hover:text-blue-700"
-              >
-                <ExternalLink size={12} />
-              </a>
-            </div>
-          )}
-          
-          {estimatedFee && (
-            <div className="text-sm text-gray-400">
-              Estimated fee: {estimatedFee} ETH
-            </div>
-          )}
-          
-          <div className="flex items-center space-x-2 text-sm">
-            <Badge variant="outline">{sourceChain}</Badge>
+            
             {destinationChain && (
               <>
-                <ArrowRight size={14} className="text-gray-400" />
-                <Badge variant="outline">{destinationChain}</Badge>
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="h-0.5 bg-gray-200 flex-1"></div>
+                  <ArrowRight className="mx-2 text-gray-400" />
+                  <div className="h-0.5 bg-gray-200 flex-1"></div>
+                </div>
+                
+                <div className="flex flex-col items-center">
+                  <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center mb-2">
+                    <span className="text-purple-700 font-medium">{destinationChain.charAt(0)}</span>
+                  </div>
+                  <span className="text-sm font-medium">{destinationChain}</span>
+                </div>
               </>
             )}
           </div>
           
+          <div className="flex items-center justify-center mb-4">
+            {getStatusIcon()}
+            <span className="ml-2 font-medium">{getStatusText()}</span>
+          </div>
+          
+          {estimatedFee && (
+            <div className="text-center text-sm text-gray-500 mb-4">
+              Estimated fee: {estimatedFee} ETH
+            </div>
+          )}
+          
+          {txHash && (
+            <div className="bg-gray-50 p-3 rounded-md flex items-center justify-between">
+              <div className="text-sm truncate max-w-[200px]">
+                Tx: {txHash.substring(0, 8)}...{txHash.substring(txHash.length - 6)}
+              </div>
+              <Button variant="ghost" size="sm" asChild>
+                <a 
+                  href={`https://sepolia.etherscan.io/tx/${txHash}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center"
+                >
+                  <ExternalLink className="h-4 w-4 mr-1" /> View
+                </a>
+              </Button>
+            </div>
+          )}
+          
           {error && (
-            <div className="text-red-500 text-sm mt-2 text-center">
+            <div className="mt-4 bg-red-50 border border-red-200 p-3 rounded-md text-red-700 text-sm">
               {error.message}
             </div>
           )}
         </div>
         
-        <DialogFooter className="flex flex-col sm:flex-row sm:justify-between">
-          {status === 'failed' && onRetry ? (
-            <Button onClick={onRetry} variant="default">
-              Retry Transaction
-            </Button>
-          ) : (
-            <Button onClick={onClose} variant={status === 'completed' ? "default" : "outline"}>
-              {status === 'completed' ? 'Done' : 'Close'}
+        <DialogFooter className="flex gap-2">
+          {status === 'failed' && onRetry && (
+            <Button onClick={onRetry} className="flex items-center">
+              <RotateCw className="h-4 w-4 mr-2" /> Retry
             </Button>
           )}
+          <Button onClick={onClose} variant={status === 'failed' ? "outline" : "default"}>
+            {status === 'completed' ? 'Done' : status === 'failed' ? 'Close' : 'Hide'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

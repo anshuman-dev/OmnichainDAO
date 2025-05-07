@@ -65,9 +65,9 @@ export default function EnhancedTokenActions({ openWalletModal }: EnhancedTokenA
   
   const {
     createTransaction,
-    currentTransaction,
-    error,
-    clearTransaction,
+    transaction,
+    transactionError: error,
+    resetTransaction,
     retryTransaction
   } = useLayerZeroTransaction({
     onSuccess: (tx) => {
@@ -217,7 +217,7 @@ export default function EnhancedTokenActions({ openWalletModal }: EnhancedTokenA
                   error={new Error("Wallet not connected")} 
                   errorType={ErrorType.NETWORK_ERROR}
                   networkName="Wallet"
-                  onClear={clearTransaction}
+                  onClear={resetTransaction}
                 />
               </div>
             )}
