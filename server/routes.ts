@@ -749,6 +749,235 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Transaction routes
+  app.get('/api/transactions', async (req, res) => {
+    try {
+      const walletAddress = req.query.walletAddress as string;
+      const status = req.query.status as string;
+      
+      let transactions: LayerZeroTransaction[] = [];
+      
+      if (walletAddress && status) {
+        // Get transactions by address and filter by status
+        transactions = await storage.getLayerZeroTransactionsByAddress(walletAddress);
+        transactions = transactions.filter(tx => tx.status === status);
+      } else if (walletAddress) {
+        // Get transactions by address only
+        transactions = await storage.getLayerZeroTransactionsByAddress(walletAddress);
+      } else if (status) {
+        // Get transactions by status only
+        transactions = await storage.getLayerZeroTransactionsByStatus(status);
+      } else {
+        // Get all transactions (limit to last 100 for performance)
+        const allTransactions = [];
+        for (const tx of storage.layerZeroTransactions.values()) {
+          allTransactions.push(tx);
+        }
+        // Sort by most recent first
+        transactions = allTransactions
+          .sort((a, b) => 
+            b.createdAt && a.createdAt 
+              ? b.createdAt.getTime() - a.createdAt.getTime() 
+              : 0
+          )
+          .slice(0, 100);
+      }
+      
+      res.json(transactions);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      res.status(500).json({ message: 'Failed to fetch transactions' });
+    }
+  });
+
+  app.get('/api/transactions/:id', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const transaction = await storage.getLayerZeroTransaction(id);
+      
+      if (!transaction) {
+        return res.status(404).json({ message: 'Transaction not found' });
+      }
+      
+      res.json(transaction);
+    } catch (error) {
+      console.error(`Error fetching transaction ${req.params.id}:`, error);
+      res.status(500).json({ message: 'Failed to fetch transaction' });
+    }
+  });
+
+  app.post('/api/transactions', async (req, res) => {
+    try {
+      const transaction = req.body;
+      const newTransaction = await storage.createLayerZeroTransaction(transaction);
+      res.status(201).json(newTransaction);
+    } catch (error) {
+      console.error('Error creating transaction:', error);
+      res.status(500).json({ message: 'Failed to create transaction' });
+    }
+  });
+
+  app.post('/api/transactions/:id/retry', async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const transaction = await storage.getLayerZeroTransaction(id);
+      
+      if (!transaction) {
+        return res.status(404).json({ message: 'Transaction not found' });
+      }
+      
+      // Update transaction status to "pending" again
+      const updatedTransaction = await storage.updateLayerZeroTransaction(id, {
+        status: 'pending',
+        error: null,
+      });
+      
+      res.json(updatedTransaction);
+    } catch (error) {
+      console.error(`Error retrying transaction ${req.params.id}:`, error);
+      res.status(500).json({ message: 'Failed to retry transaction' });
+    }
+  });
+  
+  // Network status routes
+  app.get('/api/network/status', async (req, res) => {
+    try {
+      const statuses = await storage.getAllNetworkStatus();
+      res.json(statuses);
+    } catch (error) {
+      console.error('Error fetching network statuses:', error);
+      res.status(500).json({ message: 'Failed to fetch network statuses' });
+    }
+  });
+
+  // Gas estimation routes (mock for demo)
+  app.get('/api/network/gas', (req, res) => {
+    // Mock gas estimations for demo
+    const mockGasEstimations = {
+      'ethereum-sepolia': {
+        networkId: 'ethereum-sepolia',
+        chainId: 11155111,
+        baseFee: '25',
+        priorityFee: '2',
+        total: '27',
+        estimatedTimeBlocks: 2,
+        equivalentUSD: '0.0021'
+      },
+      'arbitrum-sepolia': {
+        networkId: 'arbitrum-sepolia',
+        chainId: 421614,
+        baseFee: '0.1',
+        priorityFee: '0.05',
+        total: '0.15',
+        estimatedTimeBlocks: 1,
+        equivalentUSD: '0.00001'
+      },
+      'optimism-sepolia': {
+        networkId: 'optimism-sepolia',
+        chainId: 11155420,
+        baseFee: '0.5',
+        priorityFee: '0.1',
+        total: '0.6',
+        estimatedTimeBlocks: 1,
+        equivalentUSD: '0.00005'
+      },
+      'base-sepolia': {
+        networkId: 'base-sepolia',
+        chainId: 84532,
+        baseFee: '0.2',
+        priorityFee: '0.05',
+        total: '0.25',
+        estimatedTimeBlocks: 1,
+        equivalentUSD: '0.00002'
+      }
+    };
+    
+    res.json(mockGasEstimations);
+  });
+
+  // LayerZero fees (mock for demo)
+  app.get('/api/layerzero/fees', (req, res) => {
+    // Mock LayerZero fees for demo
+    const mockLayerZeroFees = {
+      'ethereum-sepolia': {
+        messageFee: '0.0005',
+        dvnFee: '0.0002',
+        oracleFee: '0.0003',
+        total: '0.001',
+        estimatedUSD: '0.0001'
+      },
+      'arbitrum-sepolia': {
+        messageFee: '0.0003',
+        dvnFee: '0.0001',
+        oracleFee: '0.0001',
+        total: '0.0005',
+        estimatedUSD: '0.00005'
+      },
+      'optimism-sepolia': {
+        messageFee: '0.0003',
+        dvnFee: '0.0001',
+        oracleFee: '0.0001',
+        total: '0.0005',
+        estimatedUSD: '0.00005'
+      },
+      'base-sepolia': {
+        messageFee: '0.0003',
+        dvnFee: '0.0001',
+        oracleFee: '0.0001',
+        total: '0.0005',
+        estimatedUSD: '0.00005'
+      }
+    };
+    
+    res.json(mockLayerZeroFees);
+  });
+
+  // DVN configurations (mock for demo)
+  app.get('/api/layerzero/dvn', (req, res) => {
+    // Mock DVN configurations for demo
+    const mockDvnConfigurations = {
+      'ethereum-sepolia': {
+        networkId: 'ethereum-sepolia',
+        securityScore: 95,
+        securityLevel: 'high',
+        dvns: [
+          { id: 'dvn1', name: 'LayerZero Default', enabled: true, requiredSignatures: 1 },
+          { id: 'dvn2', name: 'Chainlink', enabled: false, requiredSignatures: 1 },
+          { id: 'dvn3', name: 'OmniBridge', enabled: false, requiredSignatures: 1 }
+        ]
+      },
+      'arbitrum-sepolia': {
+        networkId: 'arbitrum-sepolia',
+        securityScore: 90,
+        securityLevel: 'high',
+        dvns: [
+          { id: 'dvn1', name: 'LayerZero Default', enabled: true, requiredSignatures: 1 },
+          { id: 'dvn2', name: 'Chainlink', enabled: false, requiredSignatures: 1 }
+        ]
+      },
+      'optimism-sepolia': {
+        networkId: 'optimism-sepolia',
+        securityScore: 90,
+        securityLevel: 'high',
+        dvns: [
+          { id: 'dvn1', name: 'LayerZero Default', enabled: true, requiredSignatures: 1 },
+          { id: 'dvn2', name: 'Chainlink', enabled: false, requiredSignatures: 1 }
+        ]
+      },
+      'base-sepolia': {
+        networkId: 'base-sepolia',
+        securityScore: 90,
+        securityLevel: 'high',
+        dvns: [
+          { id: 'dvn1', name: 'LayerZero Default', enabled: true, requiredSignatures: 1 },
+          { id: 'dvn2', name: 'Chainlink', enabled: false, requiredSignatures: 1 }
+        ]
+      }
+    };
+    
+    res.json(mockDvnConfigurations);
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
