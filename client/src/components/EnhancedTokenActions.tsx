@@ -18,7 +18,7 @@ import { Spinner } from "@/components/ui/spinner";
 import TransactionConfirmationModal from './TransactionConfirmationModal';
 import { TransactionStatus } from './TransactionConfirmationModal';
 import TransactionErrorHandler from './TransactionErrorHandler';
-import { ErrorType } from './TransactionErrorHandler';
+import { ErrorType } from '@/types/error';
 import contractService from '@/services/contractService';
 
 interface EnhancedTokenActionsProps {
