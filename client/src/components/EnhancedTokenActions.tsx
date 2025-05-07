@@ -304,14 +304,14 @@ export default function EnhancedTokenActions({ openWalletModal }: EnhancedTokenA
                   <div>
                     <Label>From Chain</Label>
                     <ChainSelector 
-                      onChainChange={(network) => setSourceBridgeNetwork(network)} 
+                      onChainChange={(network) => setSourceBridgeNetwork(network as Network)} 
                       showHubIndicator
                     />
                   </div>
                   <div>
                     <Label>To Chain</Label>
                     <ChainSelector 
-                      onChainChange={(network) => setTargetBridgeNetwork(network)} 
+                      onChainChange={(network) => setTargetBridgeNetwork(network as Network)} 
                       showHubIndicator
                     />
                   </div>

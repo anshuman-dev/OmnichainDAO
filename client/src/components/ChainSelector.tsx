@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Network } from '@/types/token';
+import { Network } from '@/types/network';
 import { useNetwork } from '@/hooks/useNetwork';
 
 interface ChainSelectorProps {

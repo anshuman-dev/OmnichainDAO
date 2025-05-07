@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { Network } from "@/types/token";
+import { Network } from "@/types/network";
 import { AVAILABLE_NETWORKS } from "@/lib/constants";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/hooks/use-toast";

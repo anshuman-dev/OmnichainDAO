@@ -1,4 +1,5 @@
-import { ChainDistribution, SupplyCheck, Network } from "@/types/token";
+import { ChainDistribution, SupplyCheck } from "@/types/token";
+import { Network } from "@/types/network";
 
 // Default token stats
 export const DEFAULT_TOKEN_STATS = {
@@ -84,7 +85,7 @@ export const AVAILABLE_NETWORKS: Network[] = [
     id: 'sepolia',
     name: 'Ethereum Sepolia',
     chainId: 11155111,
-    layerZeroId: 10161, // LayerZero chain ID for Sepolia
+    lzChainId: 10161, // LayerZero chain ID for Sepolia
     status: 'Online',
     latency: 12,
     gasPrice: 0.05,
