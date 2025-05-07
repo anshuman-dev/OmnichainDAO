@@ -5,14 +5,15 @@ import {
   TransactionStatus,
   TransactionErrorType 
 } from '@/types/transaction';
-import { ErrorType } from '@/types/error';
+import { ErrorType, ErrorInfo } from '@/types/error';
 
 interface TransactionOptions {
   onSubmitStart?: () => void;
   onSourceConfirmed?: (txHash: string) => void;
   onDestinationConfirmed?: (txHash: string) => void;
   onComplete?: (transaction: LayerZeroTransaction) => void;
-  onError?: (error: ErrorType) => void;
+  onSuccess?: (transaction: LayerZeroTransaction) => void;
+  onError?: (error: Error | ErrorInfo) => void;
 }
 
 export function useLayerZeroTransaction(options: TransactionOptions = {}) {
@@ -20,7 +21,7 @@ export function useLayerZeroTransaction(options: TransactionOptions = {}) {
   const [currentTransaction, setCurrentTransaction] = useState<LayerZeroTransaction | null>(null);
   const [transactionStatus, setTransactionStatus] = useState<TransactionStatus>('pending');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [error, setError] = useState<ErrorType | null>(null);
+  const [error, setError] = useState<Error | ErrorInfo | null>(null);
   
   // Track a transaction
   const trackTransaction = useCallback(async (transaction: LayerZeroTransaction) => {
@@ -60,11 +61,13 @@ export function useLayerZeroTransaction(options: TransactionOptions = {}) {
           
           if (updatedTransaction.status === 'failed') {
             clearInterval(pollInterval);
-            setError({
+            const error: ErrorInfo = {
               message: updatedTransaction.error || 'Transaction failed',
-              type: 'unknown',
+              type: ErrorType.UNKNOWN,
               details: updatedTransaction.data || undefined
-            });
+            };
+            setError(error);
+            options.onError?.(error);
           }
           
         } catch (error) {
@@ -75,12 +78,14 @@ export function useLayerZeroTransaction(options: TransactionOptions = {}) {
       // Clean up interval on component unmount
       return () => clearInterval(pollInterval);
       
-    } catch (error) {
-      console.error('Error tracking transaction:', error);
-      setError({
+    } catch (err) {
+      console.error('Error tracking transaction:', err);
+      const error: ErrorInfo = {
         message: 'Failed to track transaction',
-        type: 'network_error',
-      });
+        type: ErrorType.NETWORK_ERROR,
+      };
+      setError(error);
+      options.onError?.(error);
     }
   }, [options, queryClient]);
   
@@ -107,12 +112,14 @@ export function useLayerZeroTransaction(options: TransactionOptions = {}) {
       
       return transaction;
       
-    } catch (error) {
-      console.error('Error creating transaction:', error);
-      setError({
+    } catch (err) {
+      console.error('Error creating transaction:', err);
+      const error: ErrorInfo = {
         message: 'Failed to create transaction',
-        type: 'network_error',
-      });
+        type: ErrorType.NETWORK_ERROR,
+      };
+      setError(error);
+      options.onError?.(error);
       return null;
     }
   }, [trackTransaction, queryClient]);
@@ -138,12 +145,14 @@ export function useLayerZeroTransaction(options: TransactionOptions = {}) {
       
       return result.transaction;
       
-    } catch (error) {
-      console.error('Error retrying transaction:', error);
-      setError({
+    } catch (err) {
+      console.error('Error retrying transaction:', err);
+      const error: ErrorInfo = {
         message: 'Failed to retry transaction',
-        type: 'network_error',
-      });
+        type: ErrorType.NETWORK_ERROR,
+      };
+      setError(error);
+      options.onError?.(error);
       return null;
     }
   }, [trackTransaction, queryClient]);
@@ -163,9 +172,11 @@ export function useLayerZeroTransaction(options: TransactionOptions = {}) {
   
   return {
     currentTransaction,
+    transaction: currentTransaction, // Alias for better naming in components
     transactionStatus,
     isModalOpen,
     error,
+    transactionError: error, // Alias for better naming in components
     createTransaction,
     trackTransaction,
     retryTransaction,

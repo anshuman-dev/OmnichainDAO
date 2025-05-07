@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { CheckCircle, XCircle, ExternalLink, ArrowRight } from "lucide-react";
 import TransactionErrorHandler from './TransactionErrorHandler';
-import { ErrorType } from '@/types/error';
+import { ErrorType, ErrorInfo } from '@/types/error';
 import { TransactionStatus } from '@/types/transaction';
 
 interface TransactionStep {
@@ -29,7 +29,7 @@ interface TransactionConfirmationModalProps {
   status: TransactionStatus;
   sourceTxHash?: string;
   destinationTxHash?: string;
-  error?: ErrorType;
+  error?: Error | ErrorInfo | null;
   onRetry?: () => void;
 }
 
