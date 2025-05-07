@@ -2,7 +2,8 @@ import {
   users, 
   bridgeTransactions, 
   supplyChecks, 
-  networkStatus, 
+  networkStatus,
+  layerZeroTransactions,
   type User, 
   type InsertUser,
   type BridgeTransaction,
@@ -10,7 +11,9 @@ import {
   type SupplyCheck,
   type InsertSupplyCheck,
   type NetworkStatus,
-  type InsertNetworkStatus
+  type InsertNetworkStatus,
+  type LayerZeroTransaction,
+  type InsertLayerZeroTransaction
 } from "@shared/schema";
 import { AVAILABLE_NETWORKS } from "../client/src/lib/constants";
 
@@ -36,6 +39,14 @@ export interface IStorage {
   getNetworkStatus(id: string): Promise<NetworkStatus | undefined>;
   getAllNetworkStatus(): Promise<NetworkStatus[]>;
   upsertNetworkStatus(status: InsertNetworkStatus): Promise<NetworkStatus>;
+  
+  // LayerZero Transactions
+  getLayerZeroTransaction(id: number): Promise<LayerZeroTransaction | undefined>;
+  getLayerZeroTransactionByHash(hash: string): Promise<LayerZeroTransaction | undefined>;
+  getLayerZeroTransactionsByAddress(address: string): Promise<LayerZeroTransaction[]>;
+  getLayerZeroTransactionsByStatus(status: string): Promise<LayerZeroTransaction[]>;
+  createLayerZeroTransaction(transaction: InsertLayerZeroTransaction): Promise<LayerZeroTransaction>;
+  updateLayerZeroTransaction(id: number, updates: Partial<InsertLayerZeroTransaction>): Promise<LayerZeroTransaction>;
 }
 
 export class MemStorage implements IStorage {
@@ -43,22 +54,26 @@ export class MemStorage implements IStorage {
   private bridgeTransactions: Map<number, BridgeTransaction>;
   private supplyChecks: Map<number, SupplyCheck>;
   private networkStatus: Map<string, NetworkStatus>;
+  private layerZeroTransactions: Map<number, LayerZeroTransaction>;
   
   currentUserId: number;
   currentBridgeTransactionId: number;
   currentSupplyCheckId: number;
   currentNetworkStatusId: number;
+  currentLayerZeroTransactionId: number;
 
   constructor() {
     this.users = new Map();
     this.bridgeTransactions = new Map();
     this.supplyChecks = new Map();
     this.networkStatus = new Map();
+    this.layerZeroTransactions = new Map();
     
     this.currentUserId = 1;
     this.currentBridgeTransactionId = 1;
     this.currentSupplyCheckId = 1;
     this.currentNetworkStatusId = 1;
+    this.currentLayerZeroTransactionId = 1;
     
     // Initialize with some default data
     this.initializeData();

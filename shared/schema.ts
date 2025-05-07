@@ -47,6 +47,23 @@ export const networkStatus = pgTable("network_status", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// LayerZero Transaction schema for tracking cross-chain operations
+export const layerZeroTransactions = pgTable("layerzero_transactions", {
+  id: serial("id").primaryKey(),
+  type: text("type").notNull(), // token_bridge, proposal_creation, vote, execution
+  sourceChain: text("source_chain").notNull(),
+  destinationChain: text("destination_chain"), // Optional for non-cross-chain txs
+  sourceTxHash: text("source_tx_hash").notNull(),
+  messageId: text("message_id"), // LayerZero message ID
+  destinationTxHash: text("destination_tx_hash"), 
+  status: text("status").notNull().default("pending"), // pending, in_progress, completed, failed
+  error: text("error"), // Error message if failed
+  walletAddress: text("wallet_address").notNull(),
+  data: text("data"), // Additional JSON data
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -80,6 +97,19 @@ export const insertNetworkStatusSchema = createInsertSchema(networkStatus).pick(
   txCount: true,
 });
 
+export const insertLayerZeroTransactionSchema = createInsertSchema(layerZeroTransactions).pick({
+  type: true,
+  sourceChain: true,
+  destinationChain: true,
+  sourceTxHash: true,
+  messageId: true,
+  destinationTxHash: true,
+  status: true,
+  error: true,
+  walletAddress: true,
+  data: true,
+});
+
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -92,3 +122,6 @@ export type SupplyCheck = typeof supplyChecks.$inferSelect;
 
 export type InsertNetworkStatus = z.infer<typeof insertNetworkStatusSchema>;
 export type NetworkStatus = typeof networkStatus.$inferSelect;
+
+export type InsertLayerZeroTransaction = z.infer<typeof insertLayerZeroTransactionSchema>;
+export type LayerZeroTransaction = typeof layerZeroTransactions.$inferSelect;
