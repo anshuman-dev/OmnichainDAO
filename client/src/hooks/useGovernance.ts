@@ -4,7 +4,7 @@ import { ethers } from 'ethers';
 import { useToast } from './use-toast';
 import { useNetwork } from './useNetwork';
 import { useContractService } from './useContractService';
-import { ContractErrorType } from '../services/contractService';
+import { ContractErrorType, ProposalData } from '../services/contractService';
 
 export enum ProposalStatus {
   Pending = 0,
@@ -54,8 +54,8 @@ export function useGovernance() {
   const { contractService, isInitialized } = useContractService();
   
   const [isLoading, setIsLoading] = useState(false);
-  const [proposals, setProposals] = useState<ProposalDetails[]>([]);
-  const [selectedProposal, setSelectedProposal] = useState<ProposalDetails | null>(null);
+  const [proposals, setProposals] = useState<ProposalData[]>([]);
+  const [selectedProposal, setSelectedProposal] = useState<ProposalData | null>(null);
   const [voteReceipt, setVoteReceipt] = useState<VoteReceipt | null>(null);
   
   // Fetch active proposals
@@ -156,10 +156,22 @@ export function useGovernance() {
     setIsLoading(true);
     
     try {
-      // Here we'd fetch from the contract
-      // const proposalDetails = await contractService.getProposal(proposalId);
+      // Try to get from contract service first
+      try {
+        // Set network for contract service
+        contractService.setNetwork(currentNetwork);
+        
+        const proposalDetails = await contractService.getProposal(parseInt(proposalId));
+        
+        if (proposalDetails) {
+          setSelectedProposal(proposalDetails);
+          return proposalDetails;
+        }
+      } catch (contractError) {
+        console.error(`Error getting proposal from contract:`, contractError);
+      }
       
-      // For now, find in our local list
+      // Fallback to local cache
       const proposal = proposals.find(p => p.id === proposalId);
       
       if (proposal) {

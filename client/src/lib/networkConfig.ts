@@ -1,26 +1,15 @@
 // Network configuration types and helpers
+import { Network as TokenNetwork } from '../types/token';
 
-// Network type definition
-export interface Network {
-  id: string;
-  name: string;
-  chainId: string;
-  layerZeroId?: number;
-  status?: string;
-  latency?: number;
-  gasPrice?: number;
-  txCount?: number;
-  color?: string;
-  isHub?: boolean;
-  lzEndpoint?: string;
-}
+// Network type definition aligned with token.ts
+export interface Network extends TokenNetwork {}
 
 // Available testnet networks updated for LayerZero V2
 export const AVAILABLE_NETWORKS: Network[] = [
   {
     id: 'sepolia',
     name: 'Ethereum Sepolia',
-    chainId: '11155111',
+    chainId: 11155111,
     layerZeroId: 40161, // LayerZero chain ID for Sepolia
     status: 'Online',
     latency: 12,
@@ -33,7 +22,7 @@ export const AVAILABLE_NETWORKS: Network[] = [
   {
     id: 'amoy',
     name: 'Polygon Amoy',
-    chainId: '80002',
+    chainId: 80002,
     layerZeroId: 40181, // LayerZero chain ID for Amoy
     status: 'Online',
     latency: 8,

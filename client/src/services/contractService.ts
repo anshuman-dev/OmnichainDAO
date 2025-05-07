@@ -6,6 +6,28 @@ import { getOmniGovernTokenContract, OmniGovernToken } from '../contracts/IOmniG
 import { getOmniProposalExecutorContract, OmniProposalExecutor } from '../contracts/IOmniProposalExecutor';
 import { getDVNConfigManagerContract, DVNConfigManager } from '../contracts/IDVNConfigManager';
 
+// Define types for proposal data
+export interface ProposalExecution {
+  chainId: number;
+  status: number;
+}
+
+export interface ProposalData {
+  id: string;
+  title: string;
+  description: string;
+  proposer: string;
+  status: number;
+  startTime: Date;
+  endTime: Date;
+  forVotes: string;
+  againstVotes: string;
+  abstainVotes: string;
+  actions: string[];
+  targetChains: number[];
+  executionStatus: ProposalExecution[];
+}
+
 // Error types for contract interactions
 export enum ContractErrorType {
   CONNECTION_ERROR = 'CONNECTION_ERROR',
@@ -463,14 +485,14 @@ export class ContractService {
   }
   
   // Get all proposal details
-  async getProposals(): Promise<any[]> {
+  async getProposals(): Promise<ProposalData[]> {
     try {
       const { proposalExecutor } = this.getContracts();
       
       // In a real implementation, we would query events or have a method to get all proposals
       // For example: const count = await proposalExecutor.getProposalCount();
       // For now, we'll check for specific proposal IDs
-      const proposals = [];
+      const proposals: ProposalData[] = [];
       
       try {
         // Try to get proposals with IDs 1-5 (adjust as needed based on your contract implementation)
@@ -479,7 +501,7 @@ export class ContractService {
             const proposal = await proposalExecutor.getProposal(i);
             if (proposal.id && !proposal.id.isZero()) {
               // Format the proposal data
-              const formattedProposal = {
+              const formattedProposal: ProposalData = {
                 id: proposal.id.toString(),
                 title: proposal.title,
                 description: proposal.description,
@@ -490,6 +512,9 @@ export class ContractService {
                 forVotes: ethers.utils.formatUnits(proposal.forVotes, 18),
                 againstVotes: ethers.utils.formatUnits(proposal.againstVotes, 18),
                 abstainVotes: ethers.utils.formatUnits(proposal.abstainVotes, 18),
+                actions: [],  // Initialize empty, will populate below
+                targetChains: [],  // Initialize empty, will populate below
+                executionStatus: []  // Initialize empty, will populate below
               };
               
               // Get proposal actions and target chains
@@ -499,12 +524,13 @@ export class ContractService {
               const [statuses, chains] = await proposalExecutor.getProposalExecutionStatus(i);
               
               // Add to formatted proposal
-              formattedProposal.actions = actions;
-              formattedProposal.targetChains = targetChains.map(tc => tc.toNumber());
-              formattedProposal.executionStatus = statuses.map((status, index) => ({
-                chainId: chains[index].toNumber(),
-                status: status.toNumber()
-              }));
+              formattedProposal.actions = actions || [];
+              formattedProposal.targetChains = targetChains ? targetChains.map(tc => tc.toNumber()) : [];
+              formattedProposal.executionStatus = statuses && chains ? 
+                statuses.map((status, index) => ({
+                  chainId: chains[index].toNumber(),
+                  status: status.toNumber()
+                })) : [];
               
               proposals.push(formattedProposal);
             }
@@ -524,15 +550,19 @@ export class ContractService {
   }
   
   // Get proposal details by ID with proper error handling
-  async getProposal(proposalId: number): Promise<any> {
+  async getProposal(proposalId: number): Promise<ProposalData | null> {
     try {
       const { proposalExecutor } = this.getContracts();
       
       // Get basic proposal info
       const proposal = await proposalExecutor.getProposal(proposalId);
       
+      if (!proposal.id || proposal.id.isZero()) {
+        return null;
+      }
+      
       // Format the proposal data
-      const formattedProposal = {
+      const formattedProposal: ProposalData = {
         id: proposal.id.toString(),
         title: proposal.title,
         description: proposal.description,
@@ -543,21 +573,29 @@ export class ContractService {
         forVotes: ethers.utils.formatUnits(proposal.forVotes, 18),
         againstVotes: ethers.utils.formatUnits(proposal.againstVotes, 18),
         abstainVotes: ethers.utils.formatUnits(proposal.abstainVotes, 18),
+        actions: [],  // Initialize empty, will populate below
+        targetChains: [],  // Initialize empty, will populate below
+        executionStatus: []  // Initialize empty, will populate below
       };
       
-      // Get proposal actions and target chains
-      const [actions, targetChains] = await proposalExecutor.getProposalActions(proposalId);
-      
-      // Get execution status
-      const [statuses, chains] = await proposalExecutor.getProposalExecutionStatus(proposalId);
-      
-      // Add to formatted proposal
-      formattedProposal.actions = actions;
-      formattedProposal.targetChains = targetChains.map(tc => tc.toNumber());
-      formattedProposal.executionStatus = statuses.map((status, index) => ({
-        chainId: chains[index].toNumber(),
-        status: status.toNumber()
-      }));
+      try {
+        // Get proposal actions and target chains
+        const [actions, targetChains] = await proposalExecutor.getProposalActions(proposalId);
+        
+        // Get execution status
+        const [statuses, chains] = await proposalExecutor.getProposalExecutionStatus(proposalId);
+        
+        // Add to formatted proposal
+        formattedProposal.actions = actions || [];
+        formattedProposal.targetChains = targetChains ? targetChains.map(tc => tc.toNumber()) : [];
+        formattedProposal.executionStatus = statuses && chains ? 
+          statuses.map((status, index) => ({
+            chainId: chains[index].toNumber(),
+            status: status.toNumber()
+          })) : [];
+      } catch (err) {
+        console.warn(`Error fetching additional proposal details for ${proposalId}:`, err);
+      }
       
       return formattedProposal;
     } catch (error) {
