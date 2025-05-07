@@ -13,13 +13,16 @@ import { useNetwork } from "@/hooks/useNetwork";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { estimateCrossChainFee, sendTokensCrossChain, getBalancesAcrossChains } from "@/services/layerzero";
 import { ethers } from "ethers";
+import { useContractService } from "./useContractService";
+import { ContractErrorType } from "../services/contractService";
+import { CHAIN_IDS } from "../config/contracts";
 
 export function useToken() {
   const { isConnected, address, provider, signer } = useWallet();
   const { currentNetwork, networks } = useNetwork();
   const { toast } = useToast();
+  const { contractService, isInitialized } = useContractService();
   
   const [tokenStats, setTokenStats] = useState<TokenStats>(DEFAULT_TOKEN_STATS);
   const [userBalance, setUserBalance] = useState<UserBalance>(DEFAULT_USER_BALANCE);
@@ -29,15 +32,53 @@ export function useToken() {
   const [isLoading, setIsLoading] = useState(false);
   const [crossChainBalances, setCrossChainBalances] = useState<Record<string, string>>({});
   
+  // Helper function to get token balances across chains using real contract interactions
+  const getBalancesAcrossChains = async (walletAddress: string): Promise<Record<string, string>> => {
+    const balances: Record<string, string> = {};
+    
+    // Get balances for each supported network
+    for (const network of networks) {
+      try {
+        if (!network.chainId) continue;
+        
+        // Get the network's chainId number
+        const chainId = parseInt(network.chainId);
+        
+        // Switch to that network
+        if (isInitialized && currentNetwork && currentNetwork.chainId !== network.chainId) {
+          contractService.setNetwork(network);
+        }
+        
+        // Get token balance on this chain
+        const balance = await contractService.getTokenBalance();
+        
+        // Store the balance
+        balances[network.id] = balance;
+      } catch (error) {
+        console.error(`Error fetching balance for ${network.name}:`, error);
+        balances[network.id] = '0.00';
+      }
+    }
+    
+    return balances;
+  };
+  
   // Fetch token stats and user balance when wallet or network changes
   useEffect(() => {
     const fetchTokenData = async () => {
-      if (currentNetwork) {
+      if (currentNetwork && isInitialized) {
         setIsLoading(true);
         try {
           // If wallet is connected, fetch balances across all chains
           if (isConnected && address) {
             try {
+              // Get token total supply
+              const totalSupply = await contractService.getTotalSupply();
+              setTokenStats(prev => ({
+                ...prev,
+                totalSupply: totalSupply,
+              }));
+              
               // Get balances across all chains
               const balances = await getBalancesAcrossChains(address);
               setCrossChainBalances(balances);
@@ -82,8 +123,10 @@ export function useToken() {
       }
     };
     
-    fetchTokenData();
-  }, [isConnected, address, currentNetwork, toast, tokenStats.price]);
+    if (isInitialized) {
+      fetchTokenData();
+    }
+  }, [isConnected, address, currentNetwork, toast, tokenStats.price, isInitialized]);
   
   // Calculate bridge fees using LayerZero service
   const calculateBridgeFees = useCallback((amount: number, destinationChainId: string): BridgeFees => {
@@ -162,7 +205,7 @@ export function useToken() {
         return;
       }
       
-      if (!provider || !address || !signer) {
+      if (!provider || !address || !signer || !isInitialized) {
         toast({
           title: "Wallet error",
           description: "Your wallet is not properly connected",
@@ -183,53 +226,119 @@ export function useToken() {
         return;
       }
       
+      // Make sure destination network has a chain ID
+      if (!destinationNetwork.chainId) {
+        toast({
+          title: "Invalid destination",
+          description: "Destination network does not have a valid chain ID",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       toast({
         title: "Preparing transaction",
         description: `Preparing to bridge ${amount} OGV from ${currentNetwork.name} to ${destinationNetwork.name}...`,
       });
       
-      // For now, we'll just simulate the bridging process
-      // In a real implementation, this would trigger a blockchain transaction
-      setTimeout(() => {
+      // Set status updates
+      const updateStatus = (status: string) => {
         toast({
-          title: "Bridging initialized",
-          description: `Bridge request submitted. Transaction pending...`,
+          title: "Bridging Status",
+          description: status,
         });
+      };
+      
+      // Use the contract service to bridge tokens
+      try {
+        const destinationChainIdNum = parseInt(destinationNetwork.chainId);
+        const amountStr = amount.toString();
         
-        // Record the bridge transaction
+        // Bridge tokens
+        const txHash = await contractService.bridgeTokens(
+          amountStr,
+          destinationChainIdNum,
+          updateStatus
+        );
+        
+        // Record the bridge transaction in our database
         apiRequest('POST', '/api/bridge', {
           amount,
           fromChain: currentNetwork.id,
           toChain: destinationChainId,
-          walletAddress: address
+          walletAddress: address,
+          txHash: txHash
         });
-        
-        // In a real implementation, we would call the sendTokensCrossChain function:
-        /*
-        const tx = await sendTokensCrossChain(
-          currentNetwork,
-          destinationNetwork,
-          amount.toString(),
-          address,
-          signer
-        );
         
         toast({
           title: "Bridging successful",
-          description: `Successfully bridged ${amount} OGV to ${destinationNetwork.name}. Transaction hash: ${tx.transactionHash}`,
+          description: `Successfully initiated bridge of ${amount} OGV to ${destinationNetwork.name}. Transaction hash: ${txHash}`,
         });
-        */
         
-      }, 2000);
+        // Update balances after bridge
+        setTimeout(async () => {
+          const balances = await getBalancesAcrossChains(address);
+          setCrossChainBalances(balances);
+          
+          // Update current network balance
+          const networkBalance = balances[currentNetwork.id] || '0';
+          const balanceNumber = parseFloat(networkBalance);
+          const balanceFormatted = balanceNumber.toLocaleString(undefined, { 
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+          
+          // Calculate USD value
+          const usdValue = (balanceNumber * parseFloat(tokenStats.price)).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+          
+          setUserBalance({
+            total: balanceFormatted,
+            usdValue: usdValue
+          });
+        }, 10000); // Wait 10 seconds before refreshing balances
+        
+      } catch (error: any) {
+        console.error("Error bridging tokens:", error);
+        
+        // Handle different error types
+        if (error.type === ContractErrorType.USER_REJECTED) {
+          toast({
+            title: "Transaction rejected",
+            description: "You rejected the transaction in your wallet",
+            variant: "destructive",
+          });
+        } else if (error.type === ContractErrorType.INSUFFICIENT_FUNDS) {
+          toast({
+            title: "Insufficient funds",
+            description: "You don't have enough funds to complete this transaction",
+            variant: "destructive",
+          });
+        } else if (error.type === ContractErrorType.TRANSACTION_ERROR) {
+          toast({
+            title: "Transaction failed",
+            description: error.message || "The transaction failed to execute on the blockchain",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Bridging failed",
+            description: error.message || "Failed to bridge tokens. Please try again later.",
+            variant: "destructive",
+          });
+        }
+      }
     } catch (error: any) {
-      console.error("Error bridging tokens:", error);
+      console.error("Error initiating bridge:", error);
       toast({
         title: "Bridging failed",
-        description: error.message || "Failed to bridge tokens. Please try again later.",
+        description: error.message || "Failed to initiate token bridge. Please try again later.",
         variant: "destructive",
       });
     }
-  }, [isConnected, currentNetwork, networks, toast, address, provider, signer]);
+  }, [isConnected, currentNetwork, networks, toast, address, provider, signer, isInitialized, contractService, tokenStats.price]);
   
   return {
     tokenStats,

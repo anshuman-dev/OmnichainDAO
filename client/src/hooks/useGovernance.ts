@@ -1,379 +1,411 @@
-import { useState, useCallback } from 'react';
-import { useNetwork } from './useNetwork';
-import { useWallet } from './useWallet';
+// Hook for governance proposal creation and voting with OmniProposalExecutor
+import { useState, useCallback, useEffect } from 'react';
+import { ethers } from 'ethers';
 import { useToast } from './use-toast';
-import {
-  getProposalDetails,
-  createProposal,
-  castVote,
-  sendCrossChainVote,
-  executeProposal,
-  hasVoted,
-  getDelegateOf,
-  delegateVotingPower,
-  getVotingPower,
-  getRecentProposals,
-  type ProposalDetails,
-  type VoteDetails
-} from '../services/governance';
-import { DEFAULT_CONTRACTS } from '../lib/constants';
+import { useNetwork } from './useNetwork';
+import { useContractService } from './useContractService';
+import { ContractErrorType } from '../services/contractService';
+
+export enum ProposalStatus {
+  Pending = 0,
+  Active = 1,
+  Canceled = 2,
+  Defeated = 3,
+  Succeeded = 4,
+  Queued = 5,
+  Expired = 6,
+  Executed = 7
+}
+
+export enum VoteType {
+  Against = 0,
+  For = 1,
+  Abstain = 2
+}
+
+export interface ProposalDetails {
+  id: string;
+  title: string;
+  description: string;
+  proposer: string;
+  status: ProposalStatus;
+  startTime: Date;
+  endTime: Date;
+  forVotes: string;
+  againstVotes: string;
+  abstainVotes: string;
+  actions: string[];
+  targetChains: number[];
+  executionStatus: {
+    chainId: number;
+    status: number;
+  }[];
+}
+
+export interface VoteReceipt {
+  hasVoted: boolean;
+  support: VoteType;
+  votes: string;
+}
 
 export function useGovernance() {
-  const { currentNetwork } = useNetwork();
-  const { isConnected, address, signer } = useWallet();
   const { toast } = useToast();
+  const { currentNetwork, networks } = useNetwork();
+  const { contractService, isInitialized } = useContractService();
   
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [proposals, setProposals] = useState<ProposalDetails[]>([]);
+  const [selectedProposal, setSelectedProposal] = useState<ProposalDetails | null>(null);
+  const [voteReceipt, setVoteReceipt] = useState<VoteReceipt | null>(null);
   
-  // Get proposal details
-  const getProposal = useCallback(
-    async (proposalId: string) => {
-      if (!isConnected || !currentNetwork) {
-        toast({
-          title: 'Not connected',
-          description: 'Please connect your wallet to view proposal details',
-          variant: 'destructive'
-        });
-        return null;
+  // Fetch active proposals
+  const fetchProposals = useCallback(async () => {
+    if (!isInitialized || !currentNetwork) return;
+    
+    setIsLoading(true);
+    
+    try {
+      // In a real implementation, we would fetch proposals from the contract
+      // For now, just simulate with a timeout
+      /*
+      const proposalCount = await contractService.getProposalCount();
+      const fetchedProposals: ProposalDetails[] = [];
+      
+      for (let i = 1; i <= proposalCount; i++) {
+        const proposal = await contractService.getProposal(i);
+        fetchedProposals.push(proposal);
       }
       
-      setLoading(true);
-      setError(null);
+      setProposals(fetchedProposals);
+      */
       
-      try {
-        // Use default governor address or pass it as a parameter
-        const governorAddress = DEFAULT_CONTRACTS.governor;
-        const proposal = await getProposalDetails(currentNetwork, governorAddress, proposalId);
+      // Simulate fetching proposals
+      // This would be replaced with real contract calls
+      
+      setTimeout(() => {
+        setProposals([
+          {
+            id: '1',
+            title: 'Upgrade OmniToken implementation',
+            description: 'Proposal to upgrade the OmniToken implementation to v2 with improved gas efficiency and new features.',
+            proposer: '0x1234567890123456789012345678901234567890',
+            status: ProposalStatus.Active,
+            startTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+            endTime: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), // 5 days from now
+            forVotes: '10000000',
+            againstVotes: '5000000',
+            abstainVotes: '2000000',
+            actions: ['0x1234...'], // Encoded actions
+            targetChains: [11155111, 80002], // Sepolia and Amoy
+            executionStatus: [
+              { chainId: 11155111, status: 0 }, // Pending
+              { chainId: 80002, status: 0 }, // Pending
+            ]
+          },
+          {
+            id: '2',
+            title: 'Add support for BNB Chain',
+            description: 'Add BNB Chain to the list of supported chains for cross-chain governance.',
+            proposer: '0x2345678901234567890123456789012345678901',
+            status: ProposalStatus.Succeeded,
+            startTime: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
+            endTime: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+            forVotes: '15000000',
+            againstVotes: '2000000',
+            abstainVotes: '1000000',
+            actions: ['0x2345...'], // Encoded actions
+            targetChains: [11155111, 80002], // Sepolia and Amoy
+            executionStatus: [
+              { chainId: 11155111, status: 0 }, // Pending
+              { chainId: 80002, status: 0 }, // Pending
+            ]
+          }
+        ]);
+      }, 1000);
+      
+    } catch (error) {
+      console.error('Error fetching proposals:', error);
+      toast({
+        title: 'Failed to load proposals',
+        description: 'Could not retrieve governance proposals. Please try again later.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contractService, currentNetwork, isInitialized, toast]);
+  
+  // Get proposal details by ID
+  const getProposal = useCallback(async (proposalId: string) => {
+    if (!isInitialized || !currentNetwork) return null;
+    
+    setIsLoading(true);
+    
+    try {
+      // Here we'd fetch from the contract
+      // const proposalDetails = await contractService.getProposal(proposalId);
+      
+      // For now, find in our local list
+      const proposal = proposals.find(p => p.id === proposalId);
+      
+      if (proposal) {
+        setSelectedProposal(proposal);
         return proposal;
-      } catch (err: any) {
-        const errorMessage = err.message || 'Failed to get proposal details';
-        setError(errorMessage);
-        toast({
-          title: 'Error',
-          description: errorMessage,
-          variant: 'destructive'
-        });
-        return null;
-      } finally {
-        setLoading(false);
       }
-    },
-    [isConnected, currentNetwork, toast]
-  );
+      
+      return null;
+    } catch (error) {
+      console.error(`Error getting proposal ${proposalId}:`, error);
+      toast({
+        title: 'Failed to load proposal',
+        description: `Could not retrieve proposal #${proposalId}. Please try again later.`,
+        variant: 'destructive',
+      });
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contractService, currentNetwork, isInitialized, proposals, toast]);
   
-  // Create a new proposal
-  const proposeAction = useCallback(
-    async (targets: string[], values: string[], calldatas: string[], description: string) => {
-      if (!isConnected || !signer || !currentNetwork) {
+  // Cast a vote on a proposal
+  const castVote = useCallback(async (proposalId: string, voteType: VoteType) => {
+    if (!isInitialized || !currentNetwork) {
+      toast({
+        title: 'Cannot vote',
+        description: 'Please connect your wallet and select a network first.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      // Set network for contract service
+      contractService.setNetwork(currentNetwork);
+      
+      // Cast the vote
+      await contractService.castVote(parseInt(proposalId), voteType);
+      
+      toast({
+        title: 'Vote cast successfully',
+        description: `Your vote has been recorded for proposal #${proposalId}.`,
+      });
+      
+      // Refresh proposal list
+      fetchProposals();
+      
+      return true;
+    } catch (error: any) {
+      console.error('Error casting vote:', error);
+      
+      // Handle different error types
+      if (error.type === ContractErrorType.USER_REJECTED) {
         toast({
-          title: 'Not connected',
-          description: 'Please connect your wallet to create a proposal',
-          variant: 'destructive'
+          title: 'Transaction rejected',
+          description: 'You rejected the voting transaction.',
+          variant: 'destructive',
         });
-        return null;
+      } else if (error.type === ContractErrorType.INSUFFICIENT_FUNDS) {
+        toast({
+          title: 'Insufficient funds',
+          description: 'You do not have enough funds to complete this transaction.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Failed to cast vote',
+          description: error.message || 'An error occurred while submitting your vote.',
+          variant: 'destructive',
+        });
       }
       
-      setLoading(true);
-      setError(null);
-      
-      try {
-        // Use default governor address or pass it as a parameter
-        const governorAddress = DEFAULT_CONTRACTS.governor;
-        const proposalId = await createProposal(
-          currentNetwork,
-          governorAddress,
-          targets,
-          values,
-          calldatas,
-          description,
-          signer
-        );
-        
-        toast({
-          title: 'Proposal created',
-          description: `Proposal ID: ${proposalId}`,
-        });
-        
-        return proposalId;
-      } catch (err: any) {
-        const errorMessage = err.message || 'Failed to create proposal';
-        setError(errorMessage);
-        toast({
-          title: 'Error',
-          description: errorMessage,
-          variant: 'destructive'
-        });
-        return null;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [isConnected, signer, currentNetwork, toast]
-  );
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contractService, currentNetwork, isInitialized, toast, fetchProposals]);
   
-  // Vote on a proposal
-  const vote = useCallback(
-    async (proposalId: string, support: 0 | 1 | 2, reason?: string) => {
-      if (!isConnected || !signer || !currentNetwork) {
-        toast({
-          title: 'Not connected',
-          description: 'Please connect your wallet to vote',
-          variant: 'destructive'
-        });
-        return false;
-      }
+  // Get vote receipt for a proposal
+  const getVoteReceipt = useCallback(async (proposalId: string, voter: string) => {
+    if (!isInitialized || !currentNetwork) return null;
+    
+    try {
+      // Set network for contract service
+      contractService.setNetwork(currentNetwork);
       
-      setLoading(true);
-      setError(null);
+      // Get the receipt
+      const receipt = await contractService.getContractReceipt(parseInt(proposalId), voter);
       
-      try {
-        // Use default governor address or pass it as a parameter
-        const governorAddress = DEFAULT_CONTRACTS.governor;
-        await castVote(currentNetwork, governorAddress, proposalId, support, reason || null, signer);
-        
-        const voteType = support === 0 ? 'against' : support === 1 ? 'for' : 'abstain';
-        toast({
-          title: 'Vote cast',
-          description: `You voted ${voteType} proposal ${proposalId}`,
-        });
-        
-        return true;
-      } catch (err: any) {
-        const errorMessage = err.message || 'Failed to cast vote';
-        setError(errorMessage);
-        toast({
-          title: 'Error',
-          description: errorMessage,
-          variant: 'destructive'
-        });
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [isConnected, signer, currentNetwork, toast]
-  );
-  
-  // Vote across chains
-  const crossChainVote = useCallback(
-    async (proposalId: string, support: 0 | 1 | 2, dstChainId: number, votes: string) => {
-      if (!isConnected || !signer || !currentNetwork) {
-        toast({
-          title: 'Not connected',
-          description: 'Please connect your wallet to vote across chains',
-          variant: 'destructive'
-        });
-        return false;
-      }
+      setVoteReceipt({
+        hasVoted: receipt.hasVoted,
+        support: receipt.support,
+        votes: ethers.utils.formatUnits(receipt.votes, 18)
+      });
       
-      setLoading(true);
-      setError(null);
-      
-      try {
-        // Use default governor address or pass it as a parameter
-        const governorAddress = DEFAULT_CONTRACTS.governor;
-        await sendCrossChainVote(
-          currentNetwork,
-          governorAddress,
-          proposalId,
-          support,
-          dstChainId,
-          votes,
-          signer
-        );
-        
-        const voteType = support === 0 ? 'against' : support === 1 ? 'for' : 'abstain';
-        toast({
-          title: 'Cross-chain vote sent',
-          description: `You voted ${voteType} proposal ${proposalId} on chain ${dstChainId}`,
-        });
-        
-        return true;
-      } catch (err: any) {
-        const errorMessage = err.message || 'Failed to send cross-chain vote';
-        setError(errorMessage);
-        toast({
-          title: 'Error',
-          description: errorMessage,
-          variant: 'destructive'
-        });
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [isConnected, signer, currentNetwork, toast]
-  );
+      return receipt;
+    } catch (error) {
+      console.error(`Error getting vote receipt for proposal ${proposalId}:`, error);
+      setVoteReceipt(null);
+      return null;
+    }
+  }, [contractService, currentNetwork, isInitialized]);
   
   // Execute a proposal
-  const execute = useCallback(
-    async (
-      proposalId: string,
-      targets: string[],
-      values: string[],
-      calldatas: string[],
-      descriptionHash: string
-    ) => {
-      if (!isConnected || !signer || !currentNetwork) {
+  const executeProposal = useCallback(async (proposalId: string) => {
+    if (!isInitialized || !currentNetwork) {
+      toast({
+        title: 'Cannot execute proposal',
+        description: 'Please connect your wallet and select a network first.',
+        variant: 'destructive',
+      });
+      return null;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      // Set network for contract service
+      contractService.setNetwork(currentNetwork);
+      
+      toast({
+        title: 'Executing proposal',
+        description: `Initiating atomic execution across all target chains...`,
+      });
+      
+      // Execute the proposal
+      const messageId = await contractService.executeProposal(parseInt(proposalId));
+      
+      toast({
+        title: 'Proposal execution initiated',
+        description: `Atomic execution started with message ID: ${messageId.substring(0, 10)}...`,
+      });
+      
+      // Refresh proposal list
+      fetchProposals();
+      
+      return messageId;
+    } catch (error: any) {
+      console.error('Error executing proposal:', error);
+      
+      // Handle different error types
+      if (error.type === ContractErrorType.USER_REJECTED) {
         toast({
-          title: 'Not connected',
-          description: 'Please connect your wallet to execute this proposal',
-          variant: 'destructive'
+          title: 'Transaction rejected',
+          description: 'You rejected the execution transaction.',
+          variant: 'destructive',
         });
-        return false;
+      } else if (error.type === ContractErrorType.INSUFFICIENT_FUNDS) {
+        toast({
+          title: 'Insufficient funds',
+          description: 'You do not have enough funds to complete this transaction.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Failed to execute proposal',
+          description: error.message || 'An error occurred while executing the proposal.',
+          variant: 'destructive',
+        });
       }
       
-      setLoading(true);
-      setError(null);
-      
-      try {
-        // Use default governor address or pass it as a parameter
-        const governorAddress = DEFAULT_CONTRACTS.governor;
-        await executeProposal(
-          currentNetwork,
-          governorAddress,
-          proposalId,
-          targets,
-          values,
-          calldatas,
-          descriptionHash,
-          signer
-        );
-        
-        toast({
-          title: 'Proposal executed',
-          description: `Proposal ${proposalId} has been executed`,
-        });
-        
-        return true;
-      } catch (err: any) {
-        const errorMessage = err.message || 'Failed to execute proposal';
-        setError(errorMessage);
-        toast({
-          title: 'Error',
-          description: errorMessage,
-          variant: 'destructive'
-        });
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [isConnected, signer, currentNetwork, toast]
-  );
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contractService, currentNetwork, isInitialized, toast, fetchProposals]);
   
-  // Check if user has voted
-  const checkVoted = useCallback(
-    async (proposalId: string) => {
-      if (!isConnected || !address || !currentNetwork) return false;
+  // Create a new proposal
+  const createProposal = useCallback(async (
+    title: string,
+    description: string,
+    actions: string[],
+    targetChains: number[]
+  ) => {
+    if (!isInitialized || !currentNetwork) {
+      toast({
+        title: 'Cannot create proposal',
+        description: 'Please connect your wallet and select a network first.',
+        variant: 'destructive',
+      });
+      return null;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      // Set network for contract service
+      contractService.setNetwork(currentNetwork);
       
-      try {
-        // Use default governor address or pass it as a parameter
-        const governorAddress = DEFAULT_CONTRACTS.governor;
-        return hasVoted(currentNetwork, governorAddress, proposalId, address);
-      } catch (err) {
-        console.error('Failed to check if user has voted:', err);
-        return false;
-      }
-    },
-    [isConnected, address, currentNetwork]
-  );
-  
-  // Get user's voting power
-  const getVoterPower = useCallback(
-    async () => {
-      if (!isConnected || !address || !currentNetwork) return '0';
+      toast({
+        title: 'Creating proposal',
+        description: `Submitting your proposal to the governance system...`,
+      });
       
-      try {
-        // Use default token address or pass it as a parameter
-        const tokenAddress = DEFAULT_CONTRACTS.oft;
-        return getVotingPower(currentNetwork, tokenAddress, address);
-      } catch (err) {
-        console.error('Failed to get voting power:', err);
-        return '0';
-      }
-    },
-    [isConnected, address, currentNetwork]
-  );
-  
-  // Delegate voting power
-  const delegate = useCallback(
-    async (delegatee: string) => {
-      if (!isConnected || !signer || !currentNetwork) {
+      // Create the proposal
+      const proposalId = await contractService.createProposal(
+        title,
+        description,
+        actions,
+        targetChains
+      );
+      
+      toast({
+        title: 'Proposal created successfully',
+        description: `Proposal #${proposalId} has been created and is now open for voting.`,
+      });
+      
+      // Refresh proposal list
+      fetchProposals();
+      
+      return proposalId;
+    } catch (error: any) {
+      console.error('Error creating proposal:', error);
+      
+      // Handle different error types
+      if (error.type === ContractErrorType.USER_REJECTED) {
         toast({
-          title: 'Not connected',
-          description: 'Please connect your wallet to delegate voting power',
-          variant: 'destructive'
+          title: 'Transaction rejected',
+          description: 'You rejected the proposal creation transaction.',
+          variant: 'destructive',
         });
-        return false;
+      } else if (error.type === ContractErrorType.INSUFFICIENT_FUNDS) {
+        toast({
+          title: 'Insufficient funds',
+          description: 'You do not have enough funds to complete this transaction.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Failed to create proposal',
+          description: error.message || 'An error occurred while creating the proposal.',
+          variant: 'destructive',
+        });
       }
       
-      setLoading(true);
-      setError(null);
-      
-      try {
-        // Use default token address or pass it as a parameter
-        const tokenAddress = DEFAULT_CONTRACTS.oft;
-        await delegateVotingPower(currentNetwork, tokenAddress, delegatee, signer);
-        
-        toast({
-          title: 'Voting power delegated',
-          description: `You delegated your voting power to ${delegatee}`,
-        });
-        
-        return true;
-      } catch (err: any) {
-        const errorMessage = err.message || 'Failed to delegate voting power';
-        setError(errorMessage);
-        toast({
-          title: 'Error',
-          description: errorMessage,
-          variant: 'destructive'
-        });
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [isConnected, signer, currentNetwork, toast]
-  );
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [contractService, currentNetwork, isInitialized, toast, fetchProposals]);
   
-  // Get recent proposals
-  const getProposals = useCallback(
-    async () => {
-      if (!currentNetwork) return [];
-      
-      setLoading(true);
-      setError(null);
-      
-      try {
-        // Use default governor address or pass it as a parameter
-        const governorAddress = DEFAULT_CONTRACTS.governor;
-        return await getRecentProposals(currentNetwork, governorAddress);
-      } catch (err: any) {
-        const errorMessage = err.message || 'Failed to get recent proposals';
-        setError(errorMessage);
-        console.error(errorMessage);
-        return [];
-      } finally {
-        setLoading(false);
-      }
-    },
-    [currentNetwork]
-  );
+  // Load proposals on initialization
+  useEffect(() => {
+    if (isInitialized && currentNetwork) {
+      fetchProposals();
+    }
+  }, [isInitialized, currentNetwork, fetchProposals]);
   
   return {
-    loading,
-    error,
+    isLoading,
+    proposals,
+    selectedProposal,
+    voteReceipt,
+    fetchProposals,
     getProposal,
-    proposeAction,
-    vote,
-    crossChainVote,
-    execute,
-    checkVoted,
-    getVoterPower,
-    delegate,
-    getProposals
+    castVote,
+    getVoteReceipt,
+    executeProposal,
+    createProposal
   };
 }
