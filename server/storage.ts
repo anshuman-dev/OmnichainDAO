@@ -201,11 +201,12 @@ export class DatabaseStorage implements IStorage {
 
   async getLayerZeroTransactionsByStatus(status: string): Promise<LayerZeroTransaction[]> {
     try {
-      const results = await db
-        .select()
-        .from(layerZeroTransactions)
-        .where(eq(layerZeroTransactions.status, status))
-        .orderBy(desc(layerZeroTransactions.createdAt));
+      // If status is "all", return all transactions, otherwise filter by status
+      const query = status === "all" 
+        ? db.select().from(layerZeroTransactions)
+        : db.select().from(layerZeroTransactions).where(eq(layerZeroTransactions.status, status));
+      
+      const results = await query.orderBy(desc(layerZeroTransactions.createdAt));
       
       return results;
     } catch (error) {

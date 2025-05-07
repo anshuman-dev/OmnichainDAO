@@ -5,7 +5,8 @@ import {
   insertBridgeTransactionSchema, 
   insertSupplyCheckSchema, 
   insertNetworkStatusSchema,
-  insertLayerZeroTransactionSchema
+  insertLayerZeroTransactionSchema,
+  LayerZeroTransaction
 } from "@shared/schema";
 import { z } from "zod";
 import { ethers } from "ethers";
@@ -900,19 +901,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Get transactions by status only
         transactions = await storage.getLayerZeroTransactionsByStatus(status);
       } else {
-        // Get all transactions (limit to last 100 for performance)
-        const allTransactions = [];
-        for (const tx of storage.layerZeroTransactions.values()) {
-          allTransactions.push(tx);
-        }
-        // Sort by most recent first
-        transactions = allTransactions
-          .sort((a, b) => 
-            b.createdAt && a.createdAt 
-              ? b.createdAt.getTime() - a.createdAt.getTime() 
-              : 0
-          )
-          .slice(0, 100);
+        // Get all transactions, limit to last 100
+        // Transactions already come sorted by createdAt desc from the database query
+        transactions = (await storage.getLayerZeroTransactionsByStatus("all")).slice(0, 100);
       }
       
       res.json(transactions);
