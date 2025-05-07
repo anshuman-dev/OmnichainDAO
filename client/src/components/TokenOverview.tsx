@@ -1,13 +1,20 @@
 import { useToken } from "@/hooks/useToken";
 import { ChainDistribution, SupplyCheck } from "@/types/token";
+import { useState } from "react";
+import { useWalletContext } from "./WalletProvider";
+import TransactionHistory from "./TransactionHistory";
+import EnhancedTokenActions from "./EnhancedTokenActions";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function TokenOverview() {
   const { tokenStats, chainDistribution, supplyChecks, isLoading } = useToken();
+  const { isConnected } = useWalletContext();
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   
   // Chain distribution color mapping
   const chainColors: Record<string, string> = {
-    "Ethereum Goerli": "bg-green-500",
-    "Polygon Mumbai": "bg-purple-500",
+    "Ethereum Sepolia": "bg-blue-500",
+    "Polygon Amoy": "bg-purple-500",
     "Arbitrum Goerli": "bg-blue-500",
     "Base Goerli": "bg-yellow-500"
   };
@@ -127,6 +134,26 @@ export default function TokenOverview() {
               </tbody>
             </table>
           </div>
+        </div>
+        
+        {/* Transaction Management Section */}
+        <div className="mt-12 space-y-6">
+          <h3 className="uppercase-label mb-4">TOKEN OPERATIONS</h3>
+          
+          <Tabs defaultValue="actions" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="actions">Token Actions</TabsTrigger>
+              <TabsTrigger value="history">Transaction History</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="actions" className="mt-4">
+              <EnhancedTokenActions openWalletModal={() => setIsWalletModalOpen(true)} />
+            </TabsContent>
+            
+            <TabsContent value="history" className="mt-4">
+              <TransactionHistory />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
