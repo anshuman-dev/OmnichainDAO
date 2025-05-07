@@ -26,6 +26,7 @@ export interface Network {
   gasPrice?: string;       // Current gas price
   txCount?: number;        // Recent transaction count
   latency?: number;        // Network latency in ms
+  lzEndpoint?: string;     // LayerZero endpoint address
 }
 
 // DVN (Decentralized Verification Network) configuration

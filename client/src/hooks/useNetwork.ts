@@ -38,7 +38,8 @@ export function useNetwork() {
   // Update gas price based on the current network
   useEffect(() => {
     // Use the network's gasPrice or default to 0.10 if not available
-    setGasPrice(currentNetwork.gasPrice || 0.10);
+    const gasPriceValue = currentNetwork.gasPrice ? parseFloat(currentNetwork.gasPrice) : 0.10;
+    setGasPrice(gasPriceValue);
   }, [currentNetwork]);
   
   // Network switching function

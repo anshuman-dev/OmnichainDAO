@@ -86,9 +86,9 @@ export const AVAILABLE_NETWORKS: Network[] = [
     name: 'Ethereum Sepolia',
     chainId: 11155111,
     lzChainId: 10161, // LayerZero chain ID for Sepolia
-    status: 'Online',
+    status: 'active',
     latency: 12,
-    gasPrice: 0.05,
+    gasPrice: '0.05',
     txCount: 8765,
     color: '#627EEA',
     isHub: true, // Hub chain for governance coordination
@@ -98,10 +98,10 @@ export const AVAILABLE_NETWORKS: Network[] = [
     id: 'amoy',
     name: 'Polygon Amoy',
     chainId: 80002,
-    layerZeroId: 40161, // LayerZero chain ID for Amoy
-    status: 'Online',
+    lzChainId: 40161, // LayerZero chain ID for Amoy
+    status: 'active',
     latency: 8,
-    gasPrice: 0.01,
+    gasPrice: '0.01',
     txCount: 5432,
     color: '#8247E5',
     isHub: false,
