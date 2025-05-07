@@ -19,6 +19,6 @@ export enum ErrorType {
 export interface ErrorInfo {
   code?: string | number;
   message: string;
-  type?: TransactionErrorType;
+  type?: TransactionErrorType | ErrorType | string;
   details?: string;
 }

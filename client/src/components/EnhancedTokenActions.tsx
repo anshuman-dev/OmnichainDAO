@@ -54,7 +54,10 @@ type BridgeFormValues = z.infer<typeof bridgeSchema>;
 
 export default function EnhancedTokenActions({ openWalletModal }: EnhancedTokenActionsProps) {
   const { toast } = useToast();
-  const { isConnected, address, balance, network: currentNetwork } = useWalletContext();
+  const { isConnected, address, chainId } = useWalletContext();
+  // Mock values for balance and currentNetwork - in a real app these would come from a proper hook
+  const balance = 100; // Mock balance value
+  const currentNetwork = { id: chainId?.toString() || "1", name: "Ethereum" };
   const { networks } = useNetworkData();
   const [sourceBridgeNetwork, setSourceBridgeNetwork] = useState<Network | null>(null);
   const [targetBridgeNetwork, setTargetBridgeNetwork] = useState<Network | null>(null);
