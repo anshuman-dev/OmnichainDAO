@@ -525,11 +525,15 @@ export class ContractService {
               
               // Add to formatted proposal
               formattedProposal.actions = actions || [];
-              formattedProposal.targetChains = targetChains ? targetChains.map(tc => tc.toNumber()) : [];
+              formattedProposal.targetChains = targetChains ? targetChains.map(tc => 
+                typeof tc.toNumber === 'function' ? tc.toNumber() : Number(tc)
+              ) : [];
               formattedProposal.executionStatus = statuses && chains ? 
                 statuses.map((status, index) => ({
-                  chainId: chains[index].toNumber(),
-                  status: status.toNumber()
+                  chainId: typeof chains[index].toNumber === 'function' ? 
+                    chains[index].toNumber() : Number(chains[index]),
+                  status: typeof status.toNumber === 'function' ? 
+                    status.toNumber() : Number(status)
                 })) : [];
               
               proposals.push(formattedProposal);
@@ -587,11 +591,15 @@ export class ContractService {
         
         // Add to formatted proposal
         formattedProposal.actions = actions || [];
-        formattedProposal.targetChains = targetChains ? targetChains.map(tc => tc.toNumber()) : [];
+        formattedProposal.targetChains = targetChains ? targetChains.map(tc => 
+          typeof tc.toNumber === 'function' ? tc.toNumber() : Number(tc)
+        ) : [];
         formattedProposal.executionStatus = statuses && chains ? 
           statuses.map((status, index) => ({
-            chainId: chains[index].toNumber(),
-            status: status.toNumber()
+            chainId: typeof chains[index].toNumber === 'function' ? 
+              chains[index].toNumber() : Number(chains[index]),
+            status: typeof status.toNumber === 'function' ? 
+              status.toNumber() : Number(status)
           })) : [];
       } catch (err) {
         console.warn(`Error fetching additional proposal details for ${proposalId}:`, err);

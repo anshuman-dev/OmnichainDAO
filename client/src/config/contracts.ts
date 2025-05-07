@@ -38,7 +38,7 @@ export function getContractAddresses(network: Network): {
   proposalExecutor: string;
   dvnManager: string;
 } | null {
-  const chainId = parseInt(network.chainId);
+  const chainId = network.chainId;
   return CONTRACT_ADDRESSES[chainId] || null;
 }
 
