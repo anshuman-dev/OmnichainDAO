@@ -1,89 +1,104 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { 
+  Card, CardContent, CardHeader, CardTitle, CardDescription 
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { 
+  Tabs, TabsContent, TabsList, TabsTrigger 
+} from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { useQuery } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowUpRight, RotateCw, ExternalLink, ArrowLeftRight, Layers } from 'lucide-react';
-import { useWalletContext } from './WalletProvider';
-import TransactionErrorHandler from './TransactionErrorHandler';
-import { ErrorType } from './TransactionErrorHandler';
+import { Layers, ArrowUpRight, ExternalLink, RotateCw } from 'lucide-react';
+import TransactionErrorHandler, { ErrorType } from './TransactionErrorHandler';
 import { Spinner } from '@/components/ui/spinner';
-import { formatDistanceToNow } from 'date-fns';
-import { LayerZeroTransaction } from '@/types/transaction';
+import { useWallet } from '@/hooks/useWallet';
+import { LayerZeroTransaction, FilterStatus } from '@/types/transaction';
 
-enum FilterStatus {
-  ALL = 'all',
-  PENDING = 'pending',
-  COMPLETED = 'completed',
-  FAILED = 'failed'
+interface TransactionHistoryProps {
+  limit?: number;
 }
 
-export default function TransactionHistory() {
-  const { isConnected, address } = useWalletContext();
+export default function TransactionHistory({ limit = 5 }: TransactionHistoryProps) {
+  const { address, isConnected } = useWallet();
   const [filter, setFilter] = useState<FilterStatus>(FilterStatus.ALL);
-  const [transactions, setTransactions] = useState<LayerZeroTransaction[]>([]);
   
-  // Fetch user transactions
-  const { data, isLoading, error, refetch } = useQuery<LayerZeroTransaction[]>({ 
-    queryKey: ['/api/layerzero/transactions', address],
-    queryFn: () => apiRequest(`/api/layerzero/transactions?address=${address}`),
-    enabled: !!address,
+  const {
+    data: transactions = [],
+    isLoading,
+    error,
+    refetch
+  } = useQuery({
+    queryKey: ['layerzero', 'transactions', address],
+    queryFn: async (): Promise<LayerZeroTransaction[]> => {
+      if (!address) return [];
+      
+      const response = await fetch(`/api/layerzero/transactions/${address}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch transactions');
+      }
+      
+      const data = await response.json();
+      return data;
+    },
+    enabled: !!address
   });
   
-  useEffect(() => {
-    if (data) {
-      // Apply filtering
-      const filteredTxs = data.filter((tx) => {
-        if (filter === FilterStatus.ALL) return true;
-        if (filter === FilterStatus.PENDING) return tx.status === 'pending' || tx.status === 'source_confirmed';
-        if (filter === FilterStatus.COMPLETED) return tx.status === 'completed';
-        if (filter === FilterStatus.FAILED) return tx.status === 'failed';
-        return true;
-      });
-      
-      // Sort by created date, newest first
-      const sortedTxs = [...filteredTxs].sort((a, b) => {
-        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return dateB - dateA;
-      });
-      
-      setTransactions(sortedTxs);
-    }
-  }, [data, filter]);
+  const filteredTransactions = transactions
+    .filter(tx => {
+      if (filter === FilterStatus.ALL) return true;
+      if (filter === FilterStatus.PENDING) return tx.status === 'pending' || tx.status === 'source_confirmed' || tx.status === 'destination_confirmed';
+      if (filter === FilterStatus.COMPLETED) return tx.status === 'completed';
+      if (filter === FilterStatus.FAILED) return tx.status === 'failed';
+      return true;
+    })
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+    .slice(0, limit);
   
+  const formatTime = (date: Date | null) => {
+    if (!date) return 'Unknown';
+    
+    const now = new Date();
+    const diff = now.getTime() - new Date(date).getTime();
+    
+    // Less than a minute
+    if (diff < 60000) {
+      return 'Just now';
+    }
+    
+    // Less than an hour
+    if (diff < 3600000) {
+      const minutes = Math.floor(diff / 60000);
+      return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    }
+    
+    // Less than a day
+    if (diff < 86400000) {
+      const hours = Math.floor(diff / 3600000);
+      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    }
+    
+    // Format as date
+    return new Date(date).toLocaleDateString();
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20">Pending</Badge>;
+        return <Badge variant="outline" className="bg-yellow-900/20 text-yellow-500">Pending</Badge>;
       case 'source_confirmed':
-        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">In Progress</Badge>;
+        return <Badge variant="outline" className="bg-blue-900/20 text-blue-500">Source Confirmed</Badge>;
+      case 'destination_confirmed':
+        return <Badge variant="outline" className="bg-purple-900/20 text-purple-500">Destination Confirmed</Badge>;
       case 'completed':
-        return <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">Completed</Badge>;
+        return <Badge variant="outline" className="bg-green-900/20 text-green-500">Completed</Badge>;
       case 'failed':
-        return <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20">Failed</Badge>;
+        return <Badge variant="outline" className="bg-red-900/20 text-red-500">Failed</Badge>;
       default:
-        return <Badge variant="outline">Unknown</Badge>;
-    }
-  };
-
-  // Get the icon for the transaction type
-  const getTransactionIcon = (type: string) => {
-    switch (type) {
-      case 'token_transfer':
-        return <ArrowUpRight className="h-4 w-4 text-blue-500" />;
-      case 'token_bridge':
-        return <ArrowLeftRight className="h-4 w-4 text-purple-500" />;
-      case 'cross_chain_message':
-        return <LayerIcon className="h-4 w-4 text-green-500" />;
-      default:
-        return <ArrowUpRight className="h-4 w-4" />;
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
   
-  // Get human-readable type label
   const getTypeLabel = (type: string) => {
     switch (type) {
       case 'token_transfer':
@@ -92,24 +107,36 @@ export default function TransactionHistory() {
         return 'Token Bridge';
       case 'cross_chain_message':
         return 'Cross-Chain Message';
+      case 'proposal_creation':
+        return 'Proposal Creation';
+      case 'vote':
+        return 'Vote Cast';
+      case 'execution':
+        return 'Proposal Execution';
       default:
         return type;
     }
   };
   
-  // Format the time for display
-  const formatTime = (timestamp: string | Date | null) => {
-    if (!timestamp) return 'Unknown';
-    
-    try {
-      const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
-      return formatDistanceToNow(date, { addSuffix: true });
-    } catch (error) {
-      return 'Invalid date';
+  const getTransactionIcon = (type: string) => {
+    switch (type) {
+      case 'token_transfer':
+        return <ArrowUpRight className="h-4 w-4 text-blue-500" />;
+      case 'token_bridge':
+        return <Layers className="h-4 w-4 text-purple-500" />;
+      case 'cross_chain_message':
+        return <ArrowUpRight className="h-4 w-4 text-green-500" />;
+      case 'proposal_creation':
+        return <ArrowUpRight className="h-4 w-4 text-yellow-500" />;
+      case 'vote':
+        return <ArrowUpRight className="h-4 w-4 text-orange-500" />;
+      case 'execution':
+        return <ArrowUpRight className="h-4 w-4 text-red-500" />;
+      default:
+        return <ArrowUpRight className="h-4 w-4" />;
     }
   };
-
-  // If not connected, show a notice
+  
   if (!isConnected) {
     return (
       <Card className="w-full border-dashed border-2 border-gray-700">
@@ -158,13 +185,13 @@ export default function TransactionHistory() {
                 <Spinner className="mr-2" />
                 <span>Loading transactions...</span>
               </div>
-            ) : transactions.length === 0 ? (
+            ) : filteredTransactions.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 No transactions found
               </div>
             ) : (
               <div className="space-y-3">
-                {transactions.map((tx) => (
+                {filteredTransactions.map((tx) => (
                   <div key={tx.id} className="border rounded-lg p-3 flex flex-col">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center">

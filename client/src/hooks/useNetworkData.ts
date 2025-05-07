@@ -1,50 +1,61 @@
-import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
-import { Network } from '@/types/network';
+import { Network, NetworkStatus } from '@/types/network';
 
-export function useNetworkData() {
-  const [networks, setNetworks] = useState<Network[]>([]);
-  
-  // Fetch network data from API
-  const { data, isLoading, error } = useQuery({ 
-    queryKey: ['/api/layerzero/networks'],
-    queryFn: () => apiRequest('/api/layerzero/networks'),
-  });
-  
-  // Fetch network status data
-  const { data: statusData } = useQuery({
-    queryKey: ['/api/networks'],
-    queryFn: () => apiRequest('/api/networks'),
-  });
-  
-  // Process and merge network data with status
-  useEffect(() => {
-    if (data && Array.isArray(data)) {
-      let networksWithStatus = data.map(network => {
-        // Find status for this network if available
-        const status = statusData && Array.isArray(statusData) 
-          ? statusData.find(s => s.networkId === network.id)
-          : null;
-          
-        return {
-          ...network,
-          // Add additional status information if available
-          status: status?.status || 'unknown',
-          latency: status?.latency || null,
-          gasPrice: status?.gasPrice ? parseFloat(status.gasPrice) : null,
-          txCount: status?.txCount || 0
-        } as Network;
-      });
-      
-      setNetworks(networksWithStatus);
+/**
+ * Hook to fetch LayerZero network data and statuses
+ */
+export default function useNetworkData() {
+  const {
+    data: networks,
+    isLoading: isLoadingNetworks, 
+    error: networksError
+  } = useQuery({
+    queryKey: ['layerzero', 'networks'],
+    queryFn: async (): Promise<Network[]> => {
+      const response = await fetch('/api/layerzero/networks');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch networks');
+      }
+      return await response.json();
     }
-  }, [data, statusData]);
+  });
   
-  return { 
-    networks, 
-    isLoading, 
-    error: error as Error | null,
-    setNetworks
+  const {
+    data: networkStatus,
+    isLoading: isLoadingStatus,
+    error: statusError
+  } = useQuery({
+    queryKey: ['networks', 'status'],
+    queryFn: async (): Promise<NetworkStatus[]> => {
+      const response = await fetch('/api/networks');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch network status');
+      }
+      return await response.json();
+    }
+  });
+  
+  const getNetworkById = (id: string): Network | undefined => {
+    return networks?.find(network => network.id === id);
+  };
+  
+  const getNetworkByChainId = (chainId: number): Network | undefined => {
+    return networks?.find(network => network.chainId === chainId);
+  };
+  
+  const getNetworkStatusById = (id: string): NetworkStatus | undefined => {
+    return networkStatus?.find(status => status.networkId === id);
+  };
+  
+  return {
+    networks,
+    networkStatus,
+    isLoading: isLoadingNetworks || isLoadingStatus,
+    error: networksError || statusError,
+    getNetworkById,
+    getNetworkByChainId,
+    getNetworkStatusById
   };
 }

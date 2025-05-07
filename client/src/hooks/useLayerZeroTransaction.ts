@@ -1,7 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
-import { useWalletContext } from '@/components/WalletProvider';
+import { useState, useCallback } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LayerZeroTransaction, CreateTransactionInput } from '@/types/transaction';
 
 interface UseLayerZeroTransactionProps {
@@ -16,121 +14,114 @@ interface UseLayerZeroTransactionProps {
 export default function useLayerZeroTransaction({
   onSuccess,
   onError,
-  pollInterval = 5000,
+  pollInterval = 5000
 }: UseLayerZeroTransactionProps = {}) {
-  const { address, isConnected } = useWalletContext();
-  const [currentTransaction, setCurrentTransaction] = useState<LayerZeroTransaction | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
-
-  // Mutation for creating a new transaction
-  const createMutation = useMutation({
-    mutationFn: async (transaction: CreateTransactionInput) => {
-      const enrichedTransaction = {
-        ...transaction,
-        walletAddress: transaction.walletAddress || address || '0x',
-      };
-      
-      const response = await apiRequest('/api/layerzero/transactions', {
+  const [currentTxId, setCurrentTxId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
+  
+  // Mutation to create a new transaction
+  const { mutate: createTransaction, isPending: isCreating } = useMutation({
+    mutationFn: async (transaction: CreateTransactionInput): Promise<LayerZeroTransaction> => {
+      const response = await fetch('/api/layerzero/transactions', {
         method: 'POST',
-        body: JSON.stringify(enrichedTransaction),
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
+        body: JSON.stringify(transaction)
       });
       
-      return response;
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create transaction');
+      }
+      
+      return await response.json();
     },
     onSuccess: (data) => {
-      setCurrentTransaction(data as LayerZeroTransaction);
-      setError(null);
-      setIsPolling(true);
-      setRetryCount(0);
+      setCurrentTxId(data.id);
+      queryClient.invalidateQueries({ queryKey: ['layerzero', 'transactions'] });
+      onSuccess?.(data);
     },
     onError: (err: Error) => {
-      setError(err);
-      if (onError) onError(err);
-    },
+      console.error('Error creating transaction:', err);
+      onError?.(err);
+    }
   });
-
-  // Query for getting a transaction by ID
-  const { data, refetch } = useQuery({
-    queryKey: ['transaction', currentTransaction?.id],
-    queryFn: () => 
-      apiRequest(`/api/layerzero/transactions/${currentTransaction?.id}`),
-    enabled: !!currentTransaction && isPolling,
-    refetchInterval: isPolling ? pollInterval : false,
-  });
-
-  // Update the transaction state when data changes
-  useEffect(() => {
-    if (data && currentTransaction?.id == data.id) {
-      setCurrentTransaction(data as LayerZeroTransaction);
+  
+  // Query to get transaction by ID (for polling current transaction)
+  const {
+    data: transaction,
+    isLoading: isLoadingTransaction,
+    error: transactionError,
+    refetch
+  } = useQuery({
+    queryKey: ['layerzero', 'transaction', currentTxId],
+    queryFn: async (): Promise<LayerZeroTransaction | null> => {
+      if (!currentTxId) return null;
       
-      // Check for completion or failure
-      if (data.status === 'completed') {
-        setIsPolling(false);
-        if (onSuccess) onSuccess(data as LayerZeroTransaction);
-      } else if (data.status === 'failed') {
-        setIsPolling(false);
-        if (data.error) {
-          setError(new Error(data.error));
-          if (onError) onError(new Error(data.error));
-        }
+      const response = await fetch(`/api/layerzero/transactions/${currentTxId}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch transaction');
       }
-    }
-  }, [data, onSuccess, onError, currentTransaction?.id]);
-
-  // Create a new transaction
-  const createTransaction = useCallback((tx: CreateTransactionInput) => {
-    createMutation.mutate(tx);
-  }, [createMutation]);
-
-  // Retry a failed transaction
-  const retryTransaction = useCallback(() => {
-    if (currentTransaction) {
-      setRetryCount(count => count + 1);
-      setIsPolling(true);
       
-      // If we have a sourceChain and sourceTxHash, we can create a new retry transaction
-      apiRequest('/api/layerzero/transactions/retry', {
+      return await response.json();
+    },
+    enabled: !!currentTxId,
+    refetchInterval: currentTxId && transaction?.status !== 'completed' && transaction?.status !== 'failed' 
+      ? pollInterval 
+      : false
+  });
+  
+  // Mutation to retry a failed transaction
+  const { mutate: retryTransaction, isPending: isRetrying } = useMutation({
+    mutationFn: async (id: number): Promise<LayerZeroTransaction> => {
+      const response = await fetch('/api/layerzero/transactions/retry', {
         method: 'POST',
-        body: JSON.stringify({ 
-          id: currentTransaction.id,
-          sourceTxHash: currentTransaction.sourceTxHash,
-          sourceChain: currentTransaction.sourceChain
-        }),
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
-      })
-      .then((response) => {
-        setCurrentTransaction(response as LayerZeroTransaction);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err);
-        setIsPolling(false);
+        body: JSON.stringify({ id })
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to retry transaction');
+      }
+      
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['layerzero', 'transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['layerzero', 'transaction', data.id] });
+      onSuccess?.(data);
+    },
+    onError: (err: Error) => {
+      console.error('Error retrying transaction:', err);
+      onError?.(err);
     }
-  }, [currentTransaction]);
-
-  // Clear the current transaction and error state
-  const clearTransaction = useCallback(() => {
-    setCurrentTransaction(null);
-    setError(null);
-    setIsPolling(false);
-    setRetryCount(0);
+  });
+  
+  // Helper to reset current transaction
+  const resetTransaction = useCallback(() => {
+    setCurrentTxId(null);
   }, []);
-
+  
   return {
+    // Transaction state
+    transaction,
+    transactionId: currentTxId,
+    isLoadingTransaction,
+    transactionError,
+    
+    // Transaction actions
     createTransaction,
-    currentTransaction,
-    isLoading: createMutation.isPending || isPolling,
-    error,
-    retryCount,
     retryTransaction,
-    clearTransaction
+    resetTransaction,
+    refetchTransaction: refetch,
+    
+    // Loading states
+    isCreating,
+    isRetrying
   };
 }

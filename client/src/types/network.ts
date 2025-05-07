@@ -6,9 +6,46 @@ export interface Network {
   rpc: string;
   isHub: boolean;
   color: string;
-  status?: string;
-  latency?: number | null;
-  gasPrice?: number | string | null;
-  txCount?: number;
-  blockNumber?: number;
+}
+
+export interface NetworkStatus {
+  id: number;
+  networkId: string;
+  name: string;
+  chainId: number;
+  status: string;
+  gasPrice: string | null;
+  latency: number | null;
+  txCount: number | null;
+  updatedAt: Date | null;
+}
+
+export interface GasEstimation {
+  networkId: string;
+  chainId: number;
+  baseFee: string;
+  priorityFee: string;
+  total: string;
+  estimatedTimeBlocks: number;
+  equivalentUSD?: string;
+}
+
+export interface LayerZeroFee {
+  messageFee: string;
+  dvnFee: string;
+  oracleFee: string;
+  total: string;
+  estimatedUSD?: string;
+}
+
+export interface DVNConfiguration {
+  networkId: string;
+  securityScore: number;
+  securityLevel: string;
+  dvns: Array<{
+    id: string;
+    name: string;
+    enabled: boolean;
+    requiredSignatures: number;
+  }>;
 }

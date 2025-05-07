@@ -30,3 +30,17 @@ export type TransactionStatus =
   | 'destination_confirmed' 
   | 'completed' 
   | 'failed';
+
+export enum FilterStatus {
+  ALL = 'all',
+  PENDING = 'pending',
+  COMPLETED = 'completed',
+  FAILED = 'failed'
+}
+
+export enum ErrorType {
+  NETWORK_ERROR = 'network_error',
+  EXECUTION_ERROR = 'execution_error',
+  TIMEOUT_ERROR = 'timeout_error',
+  UNKNOWN = 'unknown_error'
+}

@@ -11,7 +11,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import ChainSelector from "./ChainSelector";
 import { useToast } from "@/hooks/use-toast";
 import { useWalletContext } from "./WalletProvider";
-import { useNetworkData } from "@/hooks/useNetworkData";
+import useNetworkData from "@/hooks/useNetworkData";
 import useLayerZeroTransaction from "@/hooks/useLayerZeroTransaction";
 import { Network } from "@/types/network";
 import { Spinner } from "@/components/ui/spinner";
@@ -215,7 +215,8 @@ export default function EnhancedTokenActions({ openWalletModal }: EnhancedTokenA
               <div className="mt-4">
                 <TransactionErrorHandler 
                   error={new Error("Wallet not connected")} 
-                  errorType={ErrorType.WALLET_CONNECTION}
+                  errorType={ErrorType.NETWORK_ERROR}
+                  networkName="Wallet"
                   onClear={clearTransaction}
                 />
               </div>
@@ -225,10 +226,10 @@ export default function EnhancedTokenActions({ openWalletModal }: EnhancedTokenA
               <div className="mt-4">
                 <TransactionErrorHandler 
                   error={error} 
-                  txHash={currentTransaction?.sourceTxHash}
-                  errorType={ErrorType.TRANSACTION_FAILED}
-                  onRetry={retryTransaction}
-                  onClear={clearTransaction}
+                  transactionId={transaction?.id}
+                  errorType={ErrorType.EXECUTION_ERROR}
+                  onRetry={() => transaction?.id && retryTransaction(transaction.id)}
+                  onClear={resetTransaction}
                 />
               </div>
             )}

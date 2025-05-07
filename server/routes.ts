@@ -322,7 +322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // GET: LayerZero Transaction by ID
-  app.get("/api/layerzero/transaction/:id", async (req, res) => {
+  app.get("/api/layerzero/transactions/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -344,45 +344,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // POST: Create LayerZero Transaction
-  app.post("/api/layerzero/transaction", async (req, res) => {
+  app.post("/api/layerzero/transactions", async (req, res) => {
     try {
       const validateSchema = insertLayerZeroTransactionSchema.extend({
         sourceChain: z.string().min(1, "Source chain is required"),
         sourceTxHash: z.string().min(1, "Source transaction hash is required"),
         walletAddress: z.string().min(1, "Wallet address is required"),
-        type: z.enum(["token_bridge", "proposal_creation", "vote", "execution"])
+        type: z.enum(["token_transfer", "token_bridge", "cross_chain_message", "proposal_creation", "vote", "execution"])
       });
       
       const data = validateSchema.parse(req.body);
       const transaction = await storage.createLayerZeroTransaction(data);
       
-      // Simulate a transition to in_progress state after a delay (representing message being sent)
+      // Simulate a transition to source_confirmed state after a delay (representing message being sent)
       if (data.destinationChain) {
         setTimeout(async () => {
           try {
             await storage.updateLayerZeroTransaction(transaction.id, {
-              status: "in_progress",
+              status: "source_confirmed",
               messageId: `0x${Math.random().toString(16).substring(2, 34).padStart(40, '0')}`,
             });
-            console.log(`Transaction ${transaction.id} updated to in_progress`);
+            console.log(`Transaction ${transaction.id} updated to source_confirmed`);
             
-            // Then simulate completion after another delay
+            // Then simulate destination_confirmed after another delay
             setTimeout(async () => {
               try {
                 await storage.updateLayerZeroTransaction(transaction.id, {
-                  status: "completed",
-                  destinationTxHash: `0x${Math.random().toString(16).substring(2, 34).padStart(64, '0')}`,
+                  status: "destination_confirmed",
                 });
-                console.log(`Transaction ${transaction.id} completed`);
+                console.log(`Transaction ${transaction.id} confirmed on destination`);
+                
+                // Finally, mark as completed
+                setTimeout(async () => {
+                  try {
+                    await storage.updateLayerZeroTransaction(transaction.id, {
+                      status: "completed",
+                      destinationTxHash: `0x${Math.random().toString(16).substring(2, 34).padStart(64, '0')}`,
+                    });
+                    console.log(`Transaction ${transaction.id} completed`);
+                  } catch (err) {
+                    console.error(`Error updating transaction ${transaction.id}:`, err);
+                  }
+                }, 5000); // 5 seconds for final confirmation
+                
               } catch (err) {
                 console.error(`Error updating transaction ${transaction.id}:`, err);
               }
-            }, 15000); // 15 seconds for final confirmation
+            }, 8000); // 8 seconds for destination confirmation
             
           } catch (err) {
             console.error(`Error updating transaction ${transaction.id}:`, err);
           }
-        }, 5000); // 5 seconds for initial confirmation
+        }, 5000); // 5 seconds for source confirmation
+      } else {
+        // For single-chain transactions, just move to completed after a delay
+        setTimeout(async () => {
+          try {
+            await storage.updateLayerZeroTransaction(transaction.id, {
+              status: "completed",
+            });
+            console.log(`Transaction ${transaction.id} completed`);
+          } catch (err) {
+            console.error(`Error updating transaction ${transaction.id}:`, err);
+          }
+        }, 5000);
       }
       
       res.status(201).json(transaction);
@@ -399,7 +424,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // PUT: Update LayerZero Transaction
-  app.put("/api/layerzero/transaction/:id", async (req, res) => {
+  app.put("/api/layerzero/transactions/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
@@ -418,6 +443,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(500).json({ 
         error: "Failed to update LayerZero transaction",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+  
+  // POST: Retry a failed transaction
+  app.post("/api/layerzero/transactions/retry", async (req, res) => {
+    try {
+      const { id } = req.body;
+      
+      if (!id) {
+        return res.status(400).json({ error: "Transaction ID is required" });
+      }
+      
+      const transaction = await storage.getLayerZeroTransaction(id);
+      if (!transaction) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+      
+      // Update the transaction status to retrying/pending
+      const updatedTx = await storage.updateLayerZeroTransaction(id, {
+        status: "pending",
+        error: null,
+        updatedAt: new Date()
+      });
+      
+      // Simulate the transaction flow again
+      if (transaction.destinationChain) {
+        setTimeout(async () => {
+          try {
+            await storage.updateLayerZeroTransaction(id, {
+              status: "source_confirmed",
+              error: null
+            });
+            
+            // Then simulate destination confirmation
+            setTimeout(async () => {
+              try {
+                await storage.updateLayerZeroTransaction(id, {
+                  status: "destination_confirmed"
+                });
+                
+                // Finally, complete the transaction
+                setTimeout(async () => {
+                  try {
+                    const destinationTxHash = transaction.destinationTxHash || 
+                      `0x${Math.random().toString(16).substring(2, 34).padStart(64, '0')}`;
+                    
+                    await storage.updateLayerZeroTransaction(id, {
+                      status: "completed",
+                      destinationTxHash
+                    });
+                  } catch (err) {
+                    console.error(`Error completing retried transaction ${id}:`, err);
+                  }
+                }, 5000);
+                
+              } catch (err) {
+                console.error(`Error confirming retried transaction ${id}:`, err);
+              }
+            }, 8000);
+            
+          } catch (err) {
+            console.error(`Error processing retried transaction ${id}:`, err);
+          }
+        }, 5000);
+      } else {
+        // For single-chain transactions, complete directly
+        setTimeout(async () => {
+          try {
+            await storage.updateLayerZeroTransaction(id, {
+              status: "completed",
+              error: null
+            });
+          } catch (err) {
+            console.error(`Error completing retried transaction ${id}:`, err);
+          }
+        }, 5000);
+      }
+      
+      res.json(updatedTx);
+    } catch (error) {
+      console.error("Error retrying transaction:", error);
+      res.status(500).json({ 
+        error: "Failed to retry transaction",
         details: error instanceof Error ? error.message : String(error)
       });
     }
