@@ -1,18 +1,10 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from "ws";
+import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from "@shared/schema";
 
-// For Neon DB WebSocket connection
-try {
-  neonConfig.webSocketConstructor = ws;
-} catch (error: any) {
-  console.warn("Could not set WebSocket constructor:", error?.message || "Unknown error");
-}
-
-// Create a mock DB implementation that doesn't throw errors
+// Create a mock DB implementation for demo mode
 const createMockDb = () => {
-  console.warn("Using mock database implementation for demo mode");
+  console.warn("Using mock database for demo mode");
   return {
     select: () => ({ 
       from: () => ({ 
@@ -41,50 +33,32 @@ const createMockDb = () => {
   };
 };
 
-// Initialize variables
+// Initialize database connection with simple error handling
 let pool = null;
-let db = null;
+let db;
 
-// Function to safely check if DATABASE_URL is available
-function getDatabaseUrl() {
-  // Check both process.env and import.meta.env
-  const dbUrl = process.env.DATABASE_URL || 
-               (typeof import.meta !== 'undefined' && import.meta.env?.DATABASE_URL);
-  
-  if (!dbUrl) {
-    console.warn("DATABASE_URL not found in environment variables");
-    return null;
-  }
-  
-  return dbUrl;
-}
-
-// Initialize database connection
 try {
-  const dbUrl = getDatabaseUrl();
-  
-  if (dbUrl) {
-    console.log("Database URL found, attempting connection...");
-    try {
-      pool = new Pool({ connectionString: dbUrl });
-      // Simple test query to verify connection
-      pool.query('SELECT 1').then(() => {
-        console.log("Database connection successful");
-      }).catch((err: any) => {
-        console.error("Database connection test failed:", err?.message || "Unknown error");
-      });
-      
-      db = drizzle(pool, { schema });
-    } catch (dbErr: any) {
-      console.error("Failed to initialize database:", dbErr?.message || "Unknown error");
-      db = createMockDb();
-    }
+  if (process.env.DATABASE_URL) {
+    console.log("Connecting to database...");
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+    
+    // Test connection
+    pool.query('SELECT NOW()').then(() => {
+      console.log("Database connection successful!");
+    }).catch(err => {
+      console.error("Database connection test failed:", err);
+    });
+    
+    db = drizzle(pool, { schema });
   } else {
-    // No database URL found, use mock implementation
+    console.warn("No DATABASE_URL found. Using mock database.");
     db = createMockDb();
   }
-} catch (error: any) {
-  console.error("Error during database initialization:", error?.message || "Unknown error");
+} catch (error) {
+  console.error("Database initialization error:", error);
   db = createMockDb();
 }
 
