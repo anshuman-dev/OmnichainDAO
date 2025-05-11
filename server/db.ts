@@ -5,29 +5,44 @@ import * as schema from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
 
-// Setup database connection or provide mock implementation for development/demo
+// Setup database connection with retries
+const MAX_RETRIES = 5;
+const RETRY_DELAY = 5000; // 5 seconds
+
 let pool;
 let db;
 
-if (process.env.DATABASE_URL) {
-  // Real database connection
-  pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  db = drizzle(pool, { schema });
-  console.log("Database connection established");
-} else {
-  // For deployment demo without a real database
-  console.warn("DATABASE_URL not found. Using memory fallback for demo purposes.");
-  
-  // This is a simplified mock implementation that will allow the app to start
-  // without a real database for demo purposes
-  const mockDb = {
-    select: () => ({ from: () => ({ where: () => [] }) }),
-    insert: () => ({ values: () => ({ returning: () => [{ id: 1 }] }) }),
-    update: () => ({ set: () => ({ where: () => ({ returning: () => [{ id: 1 }] }) }) }),
-    query: () => Promise.resolve([]),
-  };
-  
-  db = mockDb;
+async function connectWithRetry(retries = MAX_RETRIES) {
+  try {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL environment variable is required");
+    }
+
+    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    await pool.query('SELECT 1'); // Test the connection
+    db = drizzle(pool, { schema });
+    console.log("Database connection established successfully");
+  } catch (error) {
+    console.error(`Database connection attempt failed:`, error.message);
+    
+    if (retries > 0) {
+      console.log(`Retrying in ${RETRY_DELAY/1000} seconds... (${retries} attempts remaining)`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return connectWithRetry(retries - 1);
+    }
+    
+    console.warn("Failed to connect to database, using fallback mode");
+    // Fallback to mock implementation
+    db = {
+      select: () => ({ from: () => ({ where: () => [] }) }),
+      insert: () => ({ values: () => ({ returning: () => [{ id: 1 }] }) }),
+      update: () => ({ set: () => ({ where: () => ({ returning: () => [{ id: 1 }] }) }) }),
+      query: () => Promise.resolve([]),
+    };
+  }
 }
+
+// Initialize connection
+await connectWithRetry();
 
 export { pool, db };
