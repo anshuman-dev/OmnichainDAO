@@ -6,9 +6,9 @@ import * as schema from "@shared/schema";
 neonConfig.webSocketConstructor = ws;
 
 if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
+  console.error("DATABASE_URL not found in environment variables");
+  console.log("Please add DATABASE_URL to your Secrets in the Replit environment");
+  process.exit(1);
 }
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
