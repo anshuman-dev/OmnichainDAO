@@ -1,38 +1,45 @@
-
 #!/bin/bash
 
 # Make the script exit on any error
 set -e
 
-# Wait for database to be ready
-echo "Waiting for database to be ready..."
-MAX_RETRIES=30
-COUNT=0
-until [ $COUNT -gt $MAX_RETRIES ]
-do
-  if [ -z "$DATABASE_URL" ]; then
-    echo "Warning: DATABASE_URL is not set! The application will run in demo mode without persistent storage."
-    break
-  fi
+# Explicitly export database variables to ensure they're available
+if [ ! -z "$DATABASE_URL" ]; then
+  export DATABASE_URL="$DATABASE_URL"
+  export PGDATABASE="$PGDATABASE"
+  export PGHOST="$PGHOST"
+  export PGUSER="$PGUSER"
+  export PGPASSWORD="$PGPASSWORD"
+  export PGPORT="$PGPORT"
   
-  npm run db:push && break
+  echo "Database URL is set. Attempting to verify connection..."
   
-  COUNT=$((COUNT+1))
-  echo "Database not ready yet (attempt: $COUNT/$MAX_RETRIES)..."
-  sleep 2
-done
-
-if [ $COUNT -gt $MAX_RETRIES ]; then
-  echo "Database setup timed out, but continuing with application startup..."
+  # Verify database connection
+  node -e "
+    try {
+      const { Pool } = require('@neondatabase/serverless');
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      pool.query('SELECT 1').then(() => {
+        console.log('Database connection verified successfully');
+        process.exit(0);
+      }).catch(err => {
+        console.error('Database connection test failed:', err.message);
+        process.exit(1);
+      });
+    } catch (error) {
+      console.error('Error:', error.message);
+      process.exit(1);
+    }
+  " && {
+    echo "Running database migrations..."
+    npm run db:push || echo "Database migration failed but continuing with application startup..."
+  } || {
+    echo "Skipping migrations due to connection failure."
+  }
+else
+  echo "Warning: DATABASE_URL is not set! The application will run in demo mode without persistent storage."
 fi
 
 # Start the application
 echo "Starting application..."
-npm run start
-#!/bin/bash
-if [ -z "$DATABASE_URL" ]; then
-  echo "DATABASE_URL is not set"
-  exit 1
-fi
-
 npm run start

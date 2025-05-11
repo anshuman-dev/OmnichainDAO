@@ -1,0 +1,125 @@
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (5 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (4 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (3 attempts remaining)
+
+Retrying in 5 seconds... (2 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (1 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Failed to connect to database, using fallback mode
+
+node:internal/errors:496
+
+    ErrorCaptureStackTrace(err);
+
+    ^
+
+ 
+
+TypeError [ERR_INVALID_ARG_TYPE]: The "paths[0]" argument must be of type string. Received undefined
+
+    at new NodeError (node:internal/errors:405:5)
+
+    at validateString (node:internal/validators:162:11)
+
+    at Object.resolve (node:path:1097:7)
+
+    at file:///app/dist/index.js:1179:18 {
+
+  code: 'ERR_INVALID_ARG_TYPE'
+
+}
+
+ 
+
+Node.js v18.20.5
+
+Waiting for database to be ready...
+
+Warning: DATABASE_URL is not set! The application will run in demo mode without persistent storage.
+
+Starting application...
+
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (5 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (4 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (3 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (2 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (1 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+    ^
+
+TypeError [ERR_INVALID_ARG_TYPE]: The "paths[0]" argument must be of type string. Received undefined
+
+    at file:///app/dist/index.js:1179:18 {
+
+}
+
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (5 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (4 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (3 attempts remaining)
+
+Database connection attempt failed: DATABASE_URL environment variable is required
+
+Retrying in 5 seconds... (2 attempts remaining)
