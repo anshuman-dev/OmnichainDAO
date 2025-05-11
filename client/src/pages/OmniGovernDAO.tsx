@@ -105,7 +105,13 @@ export default function OmniGovernDAO() {
           />
           
           {!isConnected ? (
-            <Button onClick={openWalletModal}>Connect Wallet</Button>
+            <Button 
+              onClick={openWalletModal}
+              className="connect-wallet-btn"
+              variant="default"
+            >
+              Connect Wallet
+            </Button>
           ) : (
             <div className="flex gap-2">
               <NetworkHelperDialog>

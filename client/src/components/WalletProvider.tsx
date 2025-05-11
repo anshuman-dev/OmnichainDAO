@@ -11,6 +11,37 @@ interface WalletProviderProps {
 
 export default function WalletProvider({ children }: WalletProviderProps) {
   const wallet = useWallet();
+
+  useEffect(() => {
+    // Check connection status on mount and when window.ethereum changes
+    const checkConnection = async () => {
+      if (window.ethereum) {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts && accounts.length > 0) {
+          wallet.connectWallet('metamask');
+        }
+      }
+    };
+
+    checkConnection();
+    
+    // Listen for account changes
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', (accounts: string[]) => {
+        if (accounts.length === 0) {
+          wallet.disconnectWallet();
+        } else {
+          wallet.connectWallet('metamask');
+        }
+      });
+    }
+
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeListener('accountsChanged', () => {});
+      }
+    };
+  }, []);
   
   return (
     <WalletContext.Provider value={wallet}>
