@@ -1,0 +1,125 @@
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+DATABASE_URL not found in environment variables
+
+Please add DATABASE_URL to your Secrets in the Replit environment
+
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+DATABASE_URL not found in environment variables
+
+Please add DATABASE_URL to your Secrets in the Replit environment
+
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+DATABASE_URL not found in environment variables
+
+Please add DATABASE_URL to your Secrets in the Replit environment
+
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+DATABASE_URL not found in environment variables
+
+Please add DATABASE_URL to your Secrets in the Replit environment
+
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+DATABASE_URL not found in environment variables
+
+Please add DATABASE_URL to your Secrets in the Replit environment
+
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+DATABASE_URL not found in environment variables
+
+Please add DATABASE_URL to your Secrets in the Replit environment
+
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+DATABASE_URL not found in environment variables
+
+Please add DATABASE_URL to your Secrets in the Replit environment
+
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+DATABASE_URL not found in environment variables
+
+Please add DATABASE_URL to your Secrets in the Replit environment
+
+npm warn config production Use `--omit=dev` instead.
+
+ 
+
+> rest-express@1.0.0 start
+
+> NODE_ENV=production node dist/index.js
+
+ 
+
+DATABASE_URL not found in environment variables
+
+Please add DATABASE_URL to your Secrets in the Replit environment

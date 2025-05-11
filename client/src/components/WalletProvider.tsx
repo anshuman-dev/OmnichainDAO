@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, useEffect, ReactNode } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import WalletConnectModal from '@/components/WalletConnectModal';
 
